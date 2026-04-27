@@ -25,7 +25,10 @@ const Register = () => {
     setLoading(true);
 
     try {
-      await authAPI.register(formData);
+      await authAPI.register({
+        ...formData,
+        email: formData.email.trim().toLowerCase()
+      });
       setSuccess(true);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {

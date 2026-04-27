@@ -1,16 +1,18 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext.jsx';
-import { authAPI } from '../services/api';
+import { API_BASE_URL, authAPI } from '../services/api';
+import { normalizeRole } from '../utils/auth.js';
 import './Login.css';
 
 const Login = () => {
   const [role, setRole] = useState('citizen');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useContext(AuthContext);
+  const { login, logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -19,9 +21,26 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await authAPI.login({ email, password });
+      let response;
       
-      if (response.data.user.role !== role) {
+      // Use different login endpoints for different roles
+      if (role === 'authority') {
+        response = await authAPI.authorityLogin({
+          email: email.trim().toLowerCase(),
+          password
+        });
+      } else {
+        response = await authAPI.login({
+          email: email.trim().toLowerCase(),
+          password
+        });
+      }
+      
+      const selectedRole = normalizeRole(role);
+      const userRole = normalizeRole(response.data.user.role);
+      
+      if (userRole !== selectedRole) {
+        logout();
         setError(`This account is not registered as ${role}`);
         setLoading(false);
         return;
@@ -29,15 +48,19 @@ const Login = () => {
       
       login(response.data.user, response.data.token);
 
-      if (response.data.user.role === 'citizen') {
+      if (userRole === 'citizen') {
         navigate('/citizen/dashboard');
-      } else if (response.data.user.role === 'authority') {
+      } else if (userRole === 'authority') {
         navigate('/authority/dashboard');
-      } else if (response.data.user.role === 'admin') {
+      } else if (userRole === 'admin') {
         navigate('/admin/dashboard');
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      if (!err.response) {
+        setError(`Backend server is not reachable on ${API_BASE_URL}. Start the backend and try again.`);
+      } else {
+        setError(err.response?.data?.error || 'Login failed');
+      }
       setLoading(false);
     }
   };
@@ -110,12 +133,20 @@ const Login = () => {
             <div className="input-group">
               <label>Password</label>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex="-1"
+              >
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </button>
             </div>
             
             {error && <div className="error">{error}</div>}

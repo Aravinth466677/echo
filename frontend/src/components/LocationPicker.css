@@ -1,0 +1,260 @@
+.lp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.lp-modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 680px;
+  max-width: 96vw;
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.lp-header {
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lp-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #1a1a1a;
+}
+
+.lp-steps {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #aaa;
+}
+
+.lp-steps span.active {
+  color: #667eea;
+  font-weight: 700;
+}
+
+.lp-hint {
+  font-size: 13px;
+  color: #888;
+  margin: 10px 24px 4px;
+}
+
+.lp-map-wrap {
+  position: relative;
+  margin: 0 24px;
+}
+
+.lp-map {
+  height: 340px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  z-index: 1;
+}
+
+.lp-zoom-warn {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 193, 7, 0.92);
+  color: #333;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.lp-address-box {
+  margin: 12px 24px;
+  padding: 12px 16px;
+  background: #f4f6ff;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #333;
+  border: 1px solid #dce3ff;
+}
+
+.lp-geocoding {
+  color: #667eea;
+  font-style: italic;
+}
+
+.lp-addr-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #c0392b;
+}
+
+.lp-addr-error input {
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #333;
+}
+
+.lp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+}
+
+.lp-btn-primary {
+  background: #667eea;
+  color: #fff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.lp-btn-primary:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.lp-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lp-btn-secondary {
+  background: #f0f0f0;
+  color: #555;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.lp-btn-secondary:hover {
+  background: #e0e0e0;
+}
+
+/* Describe step */
+.lp-describe {
+  padding: 16px 24px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lp-address-summary {
+  background: #f4f6ff;
+  border: 1px solid #dce3ff;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #333;
+}
+
+.lp-describe label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.lp-describe textarea {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+  color: #333;
+  transition: border-color 0.2s;
+}
+
+.lp-describe textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.lp-input-error {
+  border-color: #e74c3c !important;
+}
+
+.lp-error-msg {
+  color: #e74c3c;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.lp-required {
+  color: #e74c3c;
+}
+
+/* Confirm step */
+.lp-confirm {
+  padding: 16px 24px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lp-confirm-map-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+}
+
+.lp-confirm-map {
+  height: 220px;
+}
+
+.lp-confirm-details {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 2;
+  color: #333;
+  border: 1px solid #e0e0e0;
+}
+
+.lp-confirm-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  cursor: pointer;
+  padding: 10px 14px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+}
+
+.lp-confirm-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #667eea;
+}

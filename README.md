@@ -127,11 +127,11 @@ copy .env.example .env
 # DB_PASSWORD=your_password
 # JWT_SECRET=your_secret_key_here
 
-# Start backend server
+# Start backend server with auto-reload
 npm start
 
-# For development with auto-reload
-npm run dev
+# For a plain one-time Node server run
+npm run start:prod
 ```
 
 Backend will run on `http://localhost:5000`
@@ -144,7 +144,7 @@ cd c:\project\Echo\frontend
 # Install dependencies
 npm install
 
-# Create .env file (optional)
+# Create .env file (optional for local development)
 echo REACT_APP_API_URL=http://localhost:5000/api > .env
 
 # Start frontend
@@ -153,6 +153,8 @@ npm start
 
 Frontend will run on `http://localhost:3000`
 
+For ngrok or other public access, set `REACT_APP_API_URL` to your backend's public `/api` URL instead of `localhost`.
+
 ## Running the Application
 
 ### Start Backend
@@ -160,6 +162,8 @@ Frontend will run on `http://localhost:3000`
 cd c:\project\Echo\backend
 npm start
 ```
+
+`npm start` now runs the backend with auto-reload through `nodemon`.
 
 ### Start Frontend
 ```bash
@@ -226,6 +230,11 @@ MAX_FILE_SIZE=10485760
 ### Frontend (.env)
 ```
 REACT_APP_API_URL=http://localhost:5000/api
+```
+
+For public frontend access, use your backend tunnel URL instead, for example:
+```
+REACT_APP_API_URL=https://your-backend-subdomain.ngrok-free.dev/api
 ```
 
 ## Security Features
@@ -341,7 +350,7 @@ The architecture is designed to support React Native:
 ### Frontend
 1. Build production bundle: `npm run build`
 2. Serve with nginx or similar
-3. Configure API URL for production backend
+3. Configure `REACT_APP_API_URL` for the public backend URL if frontend and backend are not on the same origin
 
 ### Database
 1. Regular backups

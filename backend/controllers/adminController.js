@@ -1,6 +1,7 @@
 const pool = require('../config/database');
 const bcrypt = require('bcrypt');
 const auditLog = require('../middleware/auditLog');
+const SLAService = require('../services/slaService');
 
 const getAnalytics = async (req, res) => {
   try {
@@ -22,9 +23,13 @@ const getAnalytics = async (req, res) => {
       ORDER BY issue_count DESC
     `);
     
+    // Get SLA statistics
+    const slaStats = await SLAService.getSLAStatistics();
+    
     res.json({
       stats: stats.rows[0],
-      categoryStats: categoryStats.rows
+      categoryStats: categoryStats.rows,
+      slaStats
     });
   } catch (error) {
     console.error('Get analytics error:', error);
@@ -33,38 +38,96 @@ const getAnalytics = async (req, res) => {
 };
 
 const createAuthority = async (req, res) => {
-  const { email, password, fullName, wardId, department } = req.body;
+  const { email, password, fullName, jurisdictionId, authorityLevel, categoryId, department, wardId } = req.body;
   const adminId = req.user.id;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const resolvedAuthorityLevel = authorityLevel || 'JURISDICTION';
+  const validAuthorityLevels = ['SUPER_ADMIN', 'DEPARTMENT', 'JURISDICTION'];
+  const resolvedWardId = wardId || null;
+
+  if (!normalizedEmail || !password || !fullName) {
+    return res.status(400).json({ error: 'Email, password, and full name are required' });
+  }
+
+  if (!validAuthorityLevels.includes(resolvedAuthorityLevel)) {
+    return res.status(400).json({ error: 'Invalid authority level' });
+  }
+
+  if (resolvedAuthorityLevel === 'JURISDICTION' && !jurisdictionId) {
+    return res.status(400).json({ error: 'Jurisdiction is required for JURISDICTION authorities' });
+  }
+
+  if (resolvedAuthorityLevel === 'DEPARTMENT' && !categoryId) {
+    return res.status(400).json({ error: 'Category is required for DEPARTMENT authorities' });
+  }
   
   try {
-    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    // Check if email exists in users or authorities table
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+    const existingAuthority = await pool.query('SELECT id FROM authorities WHERE email = $1', [normalizedEmail]);
     
-    if (existingUser.rows.length > 0) {
+    if (existingUser.rows.length > 0 || existingAuthority.rows.length > 0) {
       return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    // Check if authority already exists for this jurisdiction and category combination
+    if (resolvedAuthorityLevel === 'JURISDICTION' && jurisdictionId && categoryId) {
+      const existingJurisdictionAuthority = await pool.query(
+        'SELECT id, email, full_name FROM authorities WHERE jurisdiction_id = $1 AND category_id = $2 AND authority_level = $3',
+        [jurisdictionId, categoryId, resolvedAuthorityLevel]
+      );
+      
+      if (existingJurisdictionAuthority.rows.length > 0) {
+        const existing = existingJurisdictionAuthority.rows[0];
+        return res.status(400).json({ 
+          error: 'Authority already exists for this jurisdiction and category',
+          details: `${existing.full_name} (${existing.email}) is already assigned to this jurisdiction and category combination.`
+        });
+      }
     }
     
     const passwordHash = await bcrypt.hash(password, 10);
     
-    const userResult = await pool.query(
-      `INSERT INTO users (email, password_hash, role, full_name, ward_id)
-       VALUES ($1, $2, 'authority', $3, $4)
-       RETURNING id, email, role, full_name, ward_id`,
-      [email, passwordHash, fullName, wardId]
+    // Add ward_id to the insert if authorities table has it
+    const result = await pool.query(
+      `INSERT INTO authorities (email, password_hash, full_name, authority_level, jurisdiction_id, category_id, department, ward_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, email, full_name, authority_level, jurisdiction_id, category_id, department, ward_id`,
+      [normalizedEmail, passwordHash, fullName, resolvedAuthorityLevel, jurisdictionId, categoryId, department, resolvedWardId]
     );
     
-    const user = userResult.rows[0];
+    const authority = result.rows[0];
     
-    await pool.query(
-      `INSERT INTO authority_assignments (user_id, ward_id, department)
-       VALUES ($1, $2, $3)`,
-      [user.id, wardId, department]
-    );
+    await auditLog(adminId, 'AUTHORITY_CREATED', 'authority', authority.id, 
+                   { email: normalizedEmail, authorityLevel: resolvedAuthorityLevel, jurisdictionId, categoryId, wardId: resolvedWardId }, req.ip);
     
-    await auditLog(adminId, 'AUTHORITY_CREATED', 'user', user.id, { email, wardId, department }, req.ip);
-    
-    res.status(201).json({ message: 'Authority created successfully', user });
+    res.status(201).json({ message: 'Authority created successfully', authority });
   } catch (error) {
     console.error('Create authority error:', error);
+    
+    // Handle specific database errors
+    if (error.code === '42703') { // column does not exist
+      // Fallback for tables without ward_id column
+      try {
+        const result = await pool.query(
+          `INSERT INTO authorities (email, password_hash, full_name, authority_level, jurisdiction_id, category_id, department)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, email, full_name, authority_level, jurisdiction_id, category_id, department`,
+          [normalizedEmail, passwordHash, fullName, resolvedAuthorityLevel, jurisdictionId, categoryId, department]
+        );
+        
+        const authority = result.rows[0];
+        
+        await auditLog(adminId, 'AUTHORITY_CREATED', 'authority', authority.id, 
+                       { email: normalizedEmail, authorityLevel: resolvedAuthorityLevel, jurisdictionId, categoryId }, req.ip);
+        
+        return res.status(201).json({ message: 'Authority created successfully', authority });
+      } catch (fallbackError) {
+        console.error('Fallback create authority error:', fallbackError);
+        return res.status(500).json({ error: 'Failed to create authority' });
+      }
+    }
+    
     res.status(500).json({ error: 'Failed to create authority' });
   }
 };
@@ -72,12 +135,13 @@ const createAuthority = async (req, res) => {
 const getAuthorities = async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.email, u.full_name, u.ward_id, u.is_active, u.created_at,
-             aa.department
-      FROM users u
-      LEFT JOIN authority_assignments aa ON aa.user_id = u.id
-      WHERE u.role = 'authority'
-      ORDER BY u.created_at DESC
+      SELECT a.id, a.email, a.full_name, a.authority_level, a.jurisdiction_id, a.category_id, 
+             a.department, a.is_active, a.created_at,
+             j.name as jurisdiction_name, c.name as category_name
+      FROM authorities a
+      LEFT JOIN jurisdictions j ON j.id = a.jurisdiction_id
+      LEFT JOIN categories c ON c.id = a.category_id
+      ORDER BY a.created_at DESC
     `);
     
     res.json({ authorities: result.rows });
@@ -91,23 +155,80 @@ const getSLABreaches = async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT i.id, i.echo_count, i.status, i.first_reported_at,
+             i.sla_deadline, i.sla_duration_hours, i.is_sla_breached,
              cat.name as category_name, cat.sla_hours,
              ST_Y(i.location::geometry) as latitude,
              ST_X(i.location::geometry) as longitude,
-             i.ward_id,
-             EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - i.first_reported_at))/3600 as hours_open
+             j.name as jurisdiction_name,
+             EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - i.first_reported_at))/3600 as hours_open,
+             EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - i.sla_deadline))/3600 as hours_overdue,
+             calculate_sla_status(i.sla_deadline, i.status) as sla_status
       FROM issues i
       JOIN categories cat ON i.category_id = cat.id
+      LEFT JOIN jurisdictions j ON i.jurisdiction_id = j.id
       WHERE i.status NOT IN ('resolved', 'rejected')
-      AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - i.first_reported_at))/3600 > cat.sla_hours
-      ORDER BY hours_open DESC
+      AND (i.is_sla_breached = TRUE OR i.sla_deadline < NOW())
+      ORDER BY i.sla_deadline ASC
       LIMIT 100
     `);
     
-    res.json({ breaches: result.rows });
+    // Format the results with SLA information
+    const formattedBreaches = result.rows.map(breach => {
+      const slaStatus = breach.sla_status;
+      return {
+        ...breach,
+        remaining_time_formatted: slaStatus.remaining_seconds > 0 
+          ? SLAService.formatRemainingTimeSync(slaStatus.remaining_seconds)
+          : 'Overdue',
+        status_color: slaStatus.status_color,
+        sla_display_text: slaStatus.display_text
+      };
+    });
+    
+    res.json({ breaches: formattedBreaches });
   } catch (error) {
     console.error('Get SLA breaches error:', error);
     res.status(500).json({ error: 'Failed to fetch SLA breaches' });
+  }
+};
+
+const deleteAuthority = async (req, res) => {
+  const { id } = req.params;
+  const adminId = req.user.id;
+  
+  try {
+    // Get authority info before deletion
+    const authorityResult = await pool.query(
+      'SELECT email, full_name FROM authorities WHERE id = $1',
+      [id]
+    );
+    
+    if (authorityResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Authority not found' });
+    }
+    
+    const authority = authorityResult.rows[0];
+    
+    // Nullify all foreign key references before deletion
+    await pool.query('UPDATE complaints SET assigned_authority_id = NULL WHERE assigned_authority_id = $1', [id]);
+    await pool.query('UPDATE complaints SET escalated_authority_id = NULL WHERE escalated_authority_id = $1', [id]);
+    await pool.query('UPDATE issues SET verified_by_authority_id = NULL WHERE verified_by_authority_id = $1', [id]);
+    await pool.query('UPDATE issues SET resolved_by_authority_id = NULL WHERE resolved_by_authority_id = $1', [id]);
+    
+    // Delete the authority
+    const deleteResult = await pool.query('DELETE FROM authorities WHERE id = $1', [id]);
+    
+    if (deleteResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Authority not found or already deleted' });
+    }
+    
+    await auditLog(adminId, 'AUTHORITY_DELETED', 'authority', id, 
+                   { email: authority.email, fullName: authority.full_name }, req.ip);
+    
+    res.json({ message: 'Authority deleted successfully' });
+  } catch (error) {
+    console.error('Delete authority error:', error);
+    res.status(500).json({ error: 'Failed to delete authority' });
   }
 };
 
@@ -115,5 +236,6 @@ module.exports = {
   getAnalytics,
   createAuthority,
   getAuthorities,
+  deleteAuthority,
   getSLABreaches
 };

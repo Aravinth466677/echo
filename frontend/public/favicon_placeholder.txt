@@ -1,0 +1,2 @@
+<!-- This is a placeholder. In a real project, you'd add an actual favicon.ico file -->
+<!-- For now, we'll add a favicon link in the HTML -->

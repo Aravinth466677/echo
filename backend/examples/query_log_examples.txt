@@ -1,0 +1,192 @@
+// Example Query Log Outputs
+
+// ===== SPATIAL QUERY WITH INDEX USAGE =====
+================================================================================
+[2024-01-15T14:30:25.123Z] Query executed in 45ms
+[🌍 SPATIAL QUERY DETECTED]
+Spatial functions: ST_DWithin, ST_SetSRID, ST_MakePoint
+
+📝 Query:
+SELECT c.id, c.user_id, c.created_at, c.description,
+       ST_Distance(c.location::geography, 
+                   ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography) as distance_meters
+FROM complaints c
+WHERE c.category_id = $1
+  AND c.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+  AND ST_DWithin(
+    c.location::geography,
+    ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography,
+    $4
+  )
+  AND c.validation_status != 'DUPLICATE'
+ORDER BY distance_meters ASC
+LIMIT 5
+
+📋 Parameters:
+  $1: 1
+  $2: 40.7128
+  $3: -74.0060
+  $4: 100
+
+📊 Query Plan:
+✅ Index scan detected
+🌍 Spatial index used
+Execution time: 12.45..44.23ms
+Cost: 0.29..8.32
+
+Full execution plan:
+Limit  (cost=0.29..8.32 rows=5 width=44) (actual time=12.45..44.23 rows=3 loops=1)
+  ->  Index Scan using idx_complaints_location on complaints c  (cost=0.29..156.78 rows=97 width=44) (actual time=12.44..44.21 rows=3 loops=1)
+        Index Cond: (location && st_expand(st_setsrid(st_makepoint(-74.0060, 40.7128), 4326)::geography, 100::double precision))
+        Filter: ((validation_status <> 'DUPLICATE'::text) AND (created_at > (CURRENT_TIMESTAMP - '24:00:00'::interval)) AND (category_id = 1) AND st_dwithin(location, st_setsrid(st_makepoint(-74.0060, 40.7128), 4326)::geography, 100::double precision, true))
+        Rows Removed by Filter: 0
+Planning Time: 2.15 ms
+Execution Time: 44.67 ms
+================================================================================
+
+// ===== SLOW SPATIAL QUERY WITHOUT INDEX =====
+================================================================================
+[2024-01-15T14:32:18.456Z] Query executed in 1250ms
+⚠️  SLOW QUERY WARNING (>1000ms)
+[🌍 SPATIAL QUERY DETECTED]
+Spatial functions: ST_Contains, ST_Transform
+
+📝 Query:
+SELECT j.id, j.name, j.boundary
+FROM jurisdictions j
+WHERE ST_Contains(
+  ST_Transform(j.boundary, 4326),
+  ST_SetSRID(ST_MakePoint($1, $2), 4326)
+)
+
+📋 Parameters:
+  $1: -74.0060
+  $2: 40.7128
+
+📊 Query Plan:
+⚠️  Sequential scan detected - consider adding index
+Execution time: 1245.67..1249.23ms
+Cost: 0.00..2547.89
+
+Full execution plan:
+Seq Scan on jurisdictions j  (cost=0.00..2547.89 rows=1 width=1234) (actual time=1245.67..1249.23 rows=1 loops=1)
+  Filter: st_contains(st_transform(boundary, 4326), st_setsrid(st_makepoint(-74.0060, 40.7128), 4326))
+  Rows Removed by Filter: 156
+Planning Time: 3.45 ms
+Execution Time: 1249.78 ms
+================================================================================
+
+// ===== REGULAR NON-SPATIAL QUERY =====
+================================================================================
+[2024-01-15T14:33:45.789Z] Query executed in 12ms
+
+📝 Query:
+SELECT u.id, u.email, u.full_name, u.role
+FROM users u
+WHERE u.email = $1
+  AND u.is_active = true
+
+📋 Parameters:
+  $1: 'user@example.com'
+
+📊 Query Plan:
+✅ Index scan detected
+Execution time: 0.15..11.89ms
+Cost: 0.42..8.44
+
+Full execution plan:
+Index Scan using users_email_idx on users u  (cost=0.42..8.44 rows=1 width=89) (actual time=0.15..11.89 rows=1 loops=1)
+  Index Cond: (email = 'user@example.com'::text)
+  Filter: is_active
+Planning Time: 0.89 ms
+Execution Time: 12.34 ms
+================================================================================
+
+// ===== QUERY WITH ERROR =====
+================================================================================
+[2024-01-15T14:35:12.345Z] Query executed in 5ms
+[🌍 SPATIAL QUERY DETECTED]
+Spatial functions: ST_DWithin
+
+❌ Error:
+column "invalid_column" does not exist
+
+📝 Query:
+SELECT invalid_column
+FROM complaints
+WHERE ST_DWithin(location, ST_MakePoint($1, $2), 100)
+
+📋 Parameters:
+  $1: -74.0060
+  $2: 40.7128
+================================================================================
+
+// ===== BATCH INSERT QUERY =====
+================================================================================
+[2024-01-15T14:36:30.567Z] Query executed in 89ms
+
+📝 Query:
+INSERT INTO complaints (
+  issue_id, user_id, category_id, location, latitude, longitude,
+  evidence_url, description, status
+) VALUES (
+  $1, $2, $3,
+  ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography, $4, $5,
+  $6, $7, 'submitted'
+)
+RETURNING id
+
+📋 Parameters:
+  $1: 123
+  $2: 456
+  $3: 1
+  $4: 40.7128
+  $5: -74.0060
+  $6: '/uploads/evidence.jpg'
+  $7: 'Pothole on Main Street'
+================================================================================
+
+// ===== STATISTICS SUMMARY =====
+📊 QUERY STATISTICS SUMMARY ================================================
+Total queries: 45
+Spatial queries: 12
+Average duration: 156.78ms
+Slow queries (>1000ms): 2
+Queries using indexes: 38
+================================================================================
+
+// ===== MINIMAL LOG OUTPUT (with LOG_SPATIAL_ONLY=true) =====
+================================================================================
+[2024-01-15T14:40:15.123Z] Query executed in 67ms
+[🌍 SPATIAL QUERY DETECTED]
+Spatial functions: ST_DWithin
+
+📝 Query:
+SELECT COUNT(*) FROM complaints
+WHERE ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+
+📋 Parameters:
+  $1: -74.0060
+  $2: 40.7128
+  $3: 1000
+================================================================================
+
+// ===== PRODUCTION MODE (No EXPLAIN ANALYZE) =====
+================================================================================
+[2024-01-15T14:42:33.789Z] Query executed in 234ms
+[🌍 SPATIAL QUERY DETECTED]
+Spatial functions: ST_Intersects, ST_Buffer
+
+📝 Query:
+SELECT i.id, i.echo_count
+FROM issues i
+WHERE ST_Intersects(
+  i.location::geography,
+  ST_Buffer(ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+)
+
+📋 Parameters:
+  $1: -74.0060
+  $2: 40.7128
+  $3: 500
+================================================================================

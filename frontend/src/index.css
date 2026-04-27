@@ -11,6 +11,13 @@ body {
   background: #f8f9fa;
 }
 
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }

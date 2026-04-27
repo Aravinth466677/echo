@@ -1,253 +1,416 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import LocationPicker from '../components/LocationPicker.jsx';
 import { complaintAPI } from '../services/api';
 import './ReportIssue.css';
 
 const ReportIssue = () => {
-  const [step, setStep] = useState(1);
-  const [categories, setCategories] = useState([]);
-  const [formData, setFormData] = useState({
-    categoryId: '',
-    latitude: null,
-    longitude: null,
-    description: '',
-    evidenceType: 'photo',
-    wardId: 1
-  });
-  const [file, setFile] = useState(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
 
+  // Core state
+  const [category, setCategory] = useState('');
+  const [mode, setMode] = useState('NEARBY');
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [accuracy, setAccuracy] = useState(null);
+  const [confidence, setConfidence] = useState(null);
+  const [image, setImage] = useState(null);
+  const [description, setDescription] = useState('');
+  const [justification, setJustification] = useState('');
+
+  // UI state
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [distance, setDistance] = useState(null);
+
+  // Load categories on mount
   useEffect(() => {
     loadCategories();
   }, []);
 
+  // Handle image preview
+  useEffect(() => {
+    if (!image) {
+      setImagePreview('');
+      return;
+    }
+    const url = URL.createObjectURL(image);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image]);
+
   const loadCategories = async () => {
     try {
       const response = await complaintAPI.getCategories();
-      console.log('Categories loaded:', response.data);
-      setCategories(response.data.categories);
-    } catch (error) {
-      console.error('Failed to load categories:', error);
-      setError('Failed to load categories. Please check if backend is running.');
+      setCategories(response.data?.categories || []);
+    } catch (err) {
+      setError('Failed to load categories');
     }
+  };
+
+  const getConfidenceLevel = (acc) => {
+    if (!acc) return 'LOW';
+    if (acc <= 10) return 'HIGH';
+    if (acc <= 30) return 'MEDIUM';
+    return 'LOW';
+  };
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   };
 
   const getCurrentLocation = () => {
     setLoading(true);
     setError('');
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setFormData({
-            ...formData,
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-          setLoading(false);
-        },
-        (error) => {
-          setError('Unable to get location. Please enable GPS or enter manually.');
-          setLoading(false);
-        }
-      );
-    } else {
-      setError('Geolocation is not supported. Please enter location manually.');
+
+    if (!navigator.geolocation) {
+      setError('Geolocation not supported');
       setLoading(false);
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude: lat, longitude: lng, accuracy: acc } = position.coords;
+        setLatitude(lat);
+        setLongitude(lng);
+        setAccuracy(acc);
+        setConfidence(getConfidenceLevel(acc));
+        setUserLocation({ latitude: lat, longitude: lng });
+        setLoading(false);
+      },
+      (err) => {
+        setError('Unable to get location');
+        setLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   };
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      const fileType = selectedFile.type.startsWith('image/') ? 'photo' : 'video';
-      setFile(selectedFile);
-      setFormData({ ...formData, evidenceType: fileType });
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleModeChange = (newMode) => {
+    setMode(newMode);
     setError('');
+    setShowConfirmation(false);
+    setJustification(''); // Clear justification when switching modes
+    
+    if (newMode === 'NEARBY') {
+      getCurrentLocation();
+    } else {
+      // For remote, get user location for distance calculation
+      if (!userLocation) {
+        getCurrentLocation();
+      }
+      setLatitude(null);
+      setLongitude(null);
+      setAccuracy(null);
+      setConfidence(null);
+    }
+  };
+
+  const handleLocationSelect = (location) => {
+    setLatitude(location.latitude);
+    setLongitude(location.longitude);
+    setShowLocationPicker(false);
+    
+    if (userLocation) {
+      const dist = calculateDistance(
+        userLocation.latitude, userLocation.longitude,
+        location.latitude, location.longitude
+      );
+      setDistance(dist);
+      setConfidence('LOW');
+      
+      if (dist > 2000) {
+        setError('This location is far from you');
+      }
+      setShowConfirmation(true);
+    }
+  };
+
+  const handleImageCapture = (event) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setImage(file);
+      setError('');
+    }
+  };
+
+
+
+  const handleSubmit = async () => {
+    setError('');
+
+    // Validation
+    if (!category) {
+      setError('Category required');
+      return;
+    }
+    if (!latitude || !longitude) {
+      setError('Location required');
+      return;
+    }
+    if (!image) {
+      setError('Image required');
+      return;
+    }
+    if (mode === 'REMOTE' && !justification.trim()) {
+      setError('Justification required for remote reports');
+      return;
+    }
+
     setLoading(true);
 
-    const submitData = new FormData();
-    submitData.append('categoryId', formData.categoryId);
-    submitData.append('latitude', formData.latitude);
-    submitData.append('longitude', formData.longitude);
-    submitData.append('description', formData.description);
-    submitData.append('evidenceType', formData.evidenceType);
-    submitData.append('wardId', formData.wardId);
-    submitData.append('evidence', file);
-
     try {
-      await complaintAPI.submit(submitData);
-      alert('Complaint submitted successfully!');
+      const formData = new FormData();
+      formData.append('categoryId', category);
+      formData.append('latitude', latitude.toString());
+      formData.append('longitude', longitude.toString());
+      formData.append('description', description);
+      formData.append('evidence', image);
+      formData.append('reportMode', mode === 'NEARBY' ? 'in_place' : 'remote');
+      formData.append('locationVerificationStatus', 'verified');
+      formData.append('evidenceType', 'photo');
+      
+      if (userLocation) {
+        formData.append('reporterLatitude', userLocation.latitude.toString());
+        formData.append('reporterLongitude', userLocation.longitude.toString());
+      }
+      
+      if (mode === 'REMOTE' && justification.trim()) {
+        formData.append('justification', justification.trim());
+      }
+
+      await complaintAPI.submit(formData);
       navigate('/citizen/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to submit complaint');
+    } finally {
       setLoading(false);
     }
   };
 
+  const selectedCategoryName = categories.find(c => c.id.toString() === category)?.name || '';
+
   return (
-    <div className="report-issue">
-      <header className="report-header">
-        <h1>Report New Issue</h1>
-        <button onClick={() => navigate('/citizen/dashboard')}>Back to Dashboard</button>
+    <div className="complaint-form">
+      <header className="complaint-header">
+        <button onClick={() => navigate('/citizen/dashboard')} className="back-btn">
+          ← Back
+        </button>
+        <h1>Report Issue</h1>
       </header>
 
-      <div className="report-content">
-        <div className="progress-bar">
-          <div className={`step ${step >= 1 ? 'active' : ''}`}>
-            <div className="step-number">1</div>
-            <span>Category</span>
-          </div>
-          <div className="step-divider"></div>
-          <div className={`step ${step >= 2 ? 'active' : ''}`}>
-            <div className="step-number">2</div>
-            <span>Location</span>
-          </div>
-          <div className="step-divider"></div>
-          <div className={`step ${step >= 3 ? 'active' : ''}`}>
-            <div className="step-number">3</div>
-            <span>Evidence</span>
-          </div>
-        </div>
+      <div className="complaint-content">
+        {error && <div className="error-message">{error}</div>}
 
-        {step === 1 && (
-          <div className="step-content">
-            <h2>Select Issue Category</h2>
-            <p>Choose the type of civic issue you want to report</p>
-            
-            {error && <div className="error">{error}</div>}
-            
-            {categories.length === 0 ? (
-              <p style={{textAlign: 'center', padding: '40px', color: '#666'}}>
-                Loading categories... If this persists, check if backend is running on port 5000.
-              </p>
-            ) : (
-              <div className="category-grid">
-                {categories.map((cat) => (
-                  <div
-                    key={cat.id}
-                    className={`category-card ${formData.categoryId === cat.id ? 'selected' : ''}`}
-                    onClick={() => setFormData({ ...formData, categoryId: cat.id })}
-                  >
-                    <h3>{cat.name}</h3>
-                    <p>{cat.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {formData.categoryId && (
-              <button 
-                className="location-btn" 
-                style={{marginTop: '30px'}}
-                onClick={() => setStep(2)}
+        {/* Step 1: Category Selection */}
+        <section className="form-section">
+          <h2>Select Category</h2>
+          <div className="category-grid">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                className={`category-card ${category === cat.id.toString() ? 'selected' : ''}`}
+                onClick={() => setCategory(cat.id.toString())}
               >
-                Continue to Location
+                <h3>{cat.name}</h3>
+                <p>{cat.description}</p>
               </button>
-            )}
+            ))}
           </div>
-        )}
+          {selectedCategoryName && (
+            <div className="selected-info">Selected: {selectedCategoryName}</div>
+          )}
+        </section>
 
-        {step === 2 && (
-          <div className="step-content">
-            <h2>Capture Location</h2>
-            <p>We need your GPS location to report the issue accurately</p>
-            
-            <button 
-              className="location-btn"
-              onClick={getCurrentLocation}
-              disabled={loading}
-            >
-              {loading ? 'Getting Location...' : 'Use My Current Location'}
-            </button>
-            
-            <div className="divider">OR</div>
-            
-            <div className="manual-location">
-              <h3>Enter Location Manually</h3>
-              <div className="input-row">
-                <div className="input-group">
-                  <label>Latitude</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g., 12.9716"
-                    value={formData.latitude || ''}
-                    onChange={(e) => setFormData({ ...formData, latitude: parseFloat(e.target.value) })}
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Longitude</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g., 77.5946"
-                    value={formData.longitude || ''}
-                    onChange={(e) => setFormData({ ...formData, longitude: parseFloat(e.target.value) })}
-                  />
-                </div>
-              </div>
+        {/* Step 2: Mode Selection */}
+        {category && (
+          <section className="form-section">
+            <h2>Report Mode</h2>
+            <div className="mode-toggle">
+              <button
+                className={`mode-btn ${mode === 'NEARBY' ? 'active' : ''}`}
+                onClick={() => handleModeChange('NEARBY')}
+              >
+                Nearby
+              </button>
+              <button
+                className={`mode-btn ${mode === 'REMOTE' ? 'active' : ''}`}
+                onClick={() => handleModeChange('REMOTE')}
+              >
+                Remote
+              </button>
             </div>
-            
-            {formData.latitude && formData.longitude && (
-              <>
-                <p className="location-info">
-                  Location set: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
-                </p>
-                <button 
-                  className="location-btn" 
-                  style={{marginTop: '20px'}}
-                  onClick={() => setStep(3)}
-                >
-                  Continue to Evidence
-                </button>
-              </>
-            )}
-            {error && <div className="error">{error}</div>}
-          </div>
+          </section>
         )}
 
-        {step === 3 && (
-          <div className="step-content">
-            <h2>Upload Evidence</h2>
-            <p>Provide photo or video evidence of the issue</p>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>Photo or Video (Required)</label>
-                <input
-                  type="file"
-                  accept="image/*,video/*"
-                  onChange={handleFileChange}
-                  required
-                />
-                {file && <p style={{marginTop: '8px', color: '#28a745', fontSize: '14px'}}>Selected: {file.name}</p>}
+        {/* Step 3: Location Handling */}
+        {category && (
+          <section className="form-section">
+            <h2>Location</h2>
+            
+            {mode === 'NEARBY' ? (
+              <div className="location-section">
+                <p>Using your current GPS location</p>
+                <button 
+                  onClick={getCurrentLocation} 
+                  disabled={loading}
+                  className="location-btn"
+                >
+                  {loading ? 'Getting Location...' : 'Get Current Location'}
+                </button>
+                
+                {accuracy && (
+                  <div className="gps-info">
+                    <div className="accuracy">Accuracy: {Math.round(accuracy)}m</div>
+                    <div className={`confidence confidence-${confidence.toLowerCase()}`}>
+                      Confidence: {confidence}
+                    </div>
+                  </div>
+                )}
+                
+                {latitude && longitude && (
+                  <div className="location-coords">
+                    {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                  </div>
+                )}
               </div>
-
-              <div className="form-group">
-                <label>Description (Optional)</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows="4"
-                  placeholder="Add any additional details about the issue..."
-                />
+            ) : (
+              <div className="location-section">
+                <p>Select the issue location on the map</p>
+                <button 
+                  onClick={() => setShowLocationPicker(true)}
+                  className="location-btn"
+                >
+                  Choose Location on Map
+                </button>
+                
+                {latitude && longitude && (
+                  <>
+                    <div className="location-coords">
+                      {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                    </div>
+                    {distance && (
+                      <div className="distance-info">
+                        Distance from you: {distance > 1000 ? 
+                          `${(distance/1000).toFixed(1)}km` : 
+                          `${Math.round(distance)}m`}
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                {showConfirmation && (
+                  <div className="confirmation-dialog">
+                    <p>You are reporting at a different location. Confirm?</p>
+                    <div className="confirmation-buttons">
+                      <button onClick={() => setShowConfirmation(false)}>Cancel</button>
+                      <button onClick={() => setShowConfirmation(false)}>Confirm</button>
+                    </div>
+                  </div>
+                )}
               </div>
+            )}
+          </section>
+        )}
 
-              {error && <div className="error">{error}</div>}
+        {/* Step 4: Image Capture */}
+        {category && (latitude && longitude) && (
+          <section className="form-section">
+            <h2>Capture Evidence</h2>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture={mode === 'NEARBY' ? 'environment' : undefined}
+              onChange={handleImageCapture}
+              style={{ display: 'none' }}
+            />
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="camera-btn"
+            >
+              📷 {image ? 'Change Photo' : (mode === 'NEARBY' ? 'Take Photo' : 'Upload Photo')}
+            </button>
+            <p className="helper-text">
+              {mode === 'NEARBY' 
+                ? 'Take a live photo from your current location'
+                : 'Upload an image of the issue from your gallery'}
+            </p>
+            
+            {imagePreview && (
+              <div className="image-preview">
+                <img src={imagePreview} alt="Preview" />
+              </div>
+            )}
+          </section>
+        )}
 
-              <button type="submit" disabled={loading || !file}>
-                {loading ? 'Submitting...' : 'Submit Complaint'}
-              </button>
-            </form>
-          </div>
+        {/* Description */}
+        {image && (
+          <section className="form-section">
+            <h2>Description</h2>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the issue..."
+              rows={4}
+              className="description-input"
+            />
+          </section>
+        )}
+
+        {/* Justification for Remote Reports */}
+        {image && mode === 'REMOTE' && (
+          <section className="form-section">
+            <h2>Justification Required</h2>
+            <p className="helper-text">Explain why you are reporting from a different location</p>
+            <textarea
+              value={justification}
+              onChange={(e) => setJustification(e.target.value)}
+              placeholder="Explain why you are reporting remotely..."
+              rows={3}
+              className="description-input"
+            />
+          </section>
+        )}
+
+        {/* Step 5: Submit */}
+        {category && latitude && longitude && image && (mode === 'NEARBY' || justification.trim()) && (
+          <section className="form-section">
+            <button 
+              onClick={handleSubmit}
+              disabled={loading}
+              className="submit-btn"
+            >
+              {loading ? 'Submitting...' : 'Submit Complaint'}
+            </button>
+          </section>
         )}
       </div>
+
+      {/* Location Picker Modal */}
+      {showLocationPicker && (
+        <LocationPicker
+          initialLat={userLocation?.latitude}
+          initialLng={userLocation?.longitude}
+          onConfirm={handleLocationSelect}
+          onCancel={() => setShowLocationPicker(false)}
+        />
+      )}
     </div>
   );
 };

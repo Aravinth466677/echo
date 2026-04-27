@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const SLAService = require('./slaService');
 
 /**
  * ECHO AGGREGATION LOGIC (RULE-BASED)
@@ -13,9 +14,10 @@ const pool = require('../config/database');
  * 4. If no match: create new issue with echo_count = 1
  */
 
-const findMatchingIssue = async (categoryId, latitude, longitude, userId) => {
-  const client = await pool.connect();
-  
+const findMatchingIssue = async (categoryId, latitude, longitude, userId, dbClient = null) => {
+  const client = dbClient || await pool.connect();
+  const shouldRelease = !dbClient;
+
   try {
     // Get category aggregation rules
     const categoryResult = await client.query(
@@ -78,23 +80,39 @@ const findMatchingIssue = async (categoryId, latitude, longitude, userId) => {
     return { isDuplicate: false, issueId: null };
     
   } finally {
-    client.release();
+    if (shouldRelease) {
+      client.release();
+    }
   }
 };
 
-const createNewIssue = async (categoryId, latitude, longitude, wardId) => {
-  const result = await pool.query(
-    `INSERT INTO issues (category_id, location, ward_id, echo_count)
-     VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4, 1)
+const createNewIssue = async (
+  categoryId,
+  latitude,
+  longitude,
+  wardId,
+  jurisdictionId = null,
+  dbClient = null
+) => {
+  const client = dbClient || pool;
+  
+  // Calculate SLA deadline for the new issue
+  const slaData = await SLAService.calculateSLADeadline(categoryId);
+  
+  const result = await client.query(
+    `INSERT INTO issues (category_id, location, ward_id, echo_count, jurisdiction_id, sla_duration_hours, sla_deadline)
+     VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4, 1, $5, $6, $7)
      RETURNING id`,
-    [categoryId, longitude, latitude, wardId]
+    [categoryId, longitude, latitude, wardId, jurisdictionId, slaData.sla_duration_hours, slaData.sla_deadline]
   );
   
+  console.log(`New issue ${result.rows[0].id} created with SLA deadline: ${slaData.sla_deadline}`);
   return result.rows[0].id;
 };
 
-const linkComplaintToIssue = async (issueId) => {
-  await pool.query(
+const linkComplaintToIssue = async (issueId, dbClient = null) => {
+  const client = dbClient || pool;
+  await client.query(
     `UPDATE issues 
      SET echo_count = echo_count + 1,
          last_reported_at = CURRENT_TIMESTAMP,
@@ -104,8 +122,67 @@ const linkComplaintToIssue = async (issueId) => {
   );
 };
 
+/**
+ * Re-route all complaints of an issue when priority threshold is crossed
+ */
+const rerouteIssueComplaints = async (issueId, categoryId, jurisdictionId, newEchoCount, dbClient = null) => {
+  const client = dbClient || pool;
+  
+  try {
+    console.log(`Re-routing issue ${issueId} complaints due to echo_count ${newEchoCount}`);
+    
+    // Get appropriate authority for new priority level
+    const { findAuthority } = require('./complaintRoutingService');
+    const { logComplaintReRouting } = require('./routingLoggerService');
+    const authority = await findAuthority(categoryId, jurisdictionId, client, newEchoCount);
+    
+    if (!authority) {
+      console.error('No authority found for re-routing');
+      return;
+    }
+    
+    // Get all complaints in this issue that need re-routing
+    const complaintsResult = await client.query(
+      `SELECT id, COALESCE(assigned_authority_id, assigned_to) as assigned_authority_id
+       FROM complaints 
+       WHERE issue_id = $1 AND status NOT IN ('resolved', 'rejected')`,
+      [issueId]
+    );
+    
+    // Update all complaints in this issue to new authority
+    await client.query(
+      `UPDATE complaints 
+       SET assigned_authority_id = $1, 
+           status = CASE WHEN status = 'submitted' THEN 'assigned' ELSE status END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE issue_id = $2 AND status NOT IN ('resolved', 'rejected')`,
+      [authority.id, issueId]
+    );
+    
+    // Log re-routing for each complaint
+    for (const complaint of complaintsResult.rows) {
+      await logComplaintReRouting({
+        complaintId: complaint.id,
+        issueId,
+        oldAuthorityId: complaint.assigned_authority_id,
+        newAuthorityId: authority.id,
+        newAuthorityLevel: authority.authority_level,
+        newAuthorityEmail: authority.email,
+        newAuthorityName: authority.full_name || authority.email,
+        newEchoCount,
+        reason: 'RE_ROUTING'
+      }, client);
+    }
+    
+    console.log(`Re-routed issue ${issueId} (${complaintsResult.rows.length} complaints) to ${authority.authority_level}: ${authority.email}`);
+  } catch (error) {
+    console.error('Re-route issue complaints error:', error);
+  }
+};
+
 module.exports = {
   findMatchingIssue,
   createNewIssue,
-  linkComplaintToIssue
+  linkComplaintToIssue,
+  rerouteIssueComplaints
 };

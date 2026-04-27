@@ -5,17 +5,27 @@ import Login from './components/Login.jsx';
 import Register from './components/Register.jsx';
 import CitizenDashboard from './pages/CitizenDashboard.jsx';
 import ReportIssue from './pages/ReportIssue.jsx';
+import AreaIssues from './pages/AreaIssues.jsx';
 import AuthorityDashboard from './pages/AuthorityDashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import AnalyticsDashboard from './pages/AnalyticsDashboard.jsx';
+import HeatmapDashboard from './pages/HeatmapDashboard.jsx';
+import { normalizeRole } from './utils/auth.js';
 
 const PrivateRoute = ({ children, allowedRoles }) => {
-  const { user } = React.useContext(AuthContext);
+  const { user, isAuthReady } = React.useContext(AuthContext);
+  const userRole = normalizeRole(user?.role);
+  const normalizedAllowedRoles = allowedRoles?.map(normalizeRole);
+
+  if (!isAuthReady) {
+    return null;
+  }
   
   if (!user) {
     return <Navigate to="/login" />;
   }
   
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (normalizedAllowedRoles && !normalizedAllowedRoles.includes(userRole)) {
     return <Navigate to="/login" />;
   }
   
@@ -47,12 +57,36 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/citizen/area-issues"
+            element={
+              <PrivateRoute allowedRoles={['citizen']}>
+                <AreaIssues />
+              </PrivateRoute>
+            }
+          />
           
           <Route
             path="/authority/dashboard"
             element={
               <PrivateRoute allowedRoles={['authority']}>
                 <AuthorityDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/authority/analytics"
+            element={
+              <PrivateRoute allowedRoles={['authority', 'admin']}>
+                <AnalyticsDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/heatmap"
+            element={
+              <PrivateRoute allowedRoles={['authority', 'admin', 'citizen']}>
+                <HeatmapDashboard />
               </PrivateRoute>
             }
           />

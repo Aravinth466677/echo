@@ -1,0 +1,153 @@
+.jurisdiction-map-container {
+  padding: 20px;
+  position: relative;
+}
+
+.map-controls {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.map-controls h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.control-group {
+  margin-bottom: 10px;
+}
+
+.location-search {
+  margin-bottom: 16px;
+}
+
+.search-row {
+  display: flex;
+  gap: 10px;
+}
+
+.control-group input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.search-row input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.search-row button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #1f6feb;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.search-row button:disabled {
+  background: #8fb3e8;
+  cursor: not-allowed;
+}
+
+.live-location-button {
+  background: #0f766e;
+}
+
+.live-location-button:hover {
+  background: #0b5c56;
+}
+
+.live-location-button.active {
+  background: #b42318;
+}
+
+.live-location-button.active:hover {
+  background: #912018;
+}
+
+.search-results {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.search-result {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid #d7deea;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  color: #22324a;
+}
+
+.search-result:hover {
+  background: #f3f7ff;
+  border-color: #a9c2ee;
+}
+
+.hint {
+  margin: 5px 0 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.error-message {
+  padding: 10px;
+  background: #fee;
+  color: #c33;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.leaflet-container {
+  position: relative;
+  z-index: 0;
+}
+
+.jurisdiction-list {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.leaflet-draw-toolbar a {
+  background-image: url('https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/images/spritesheet.svg');
+}
+
+.leaflet-popup button {
+  padding: 5px 10px;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 5px;
+}
+
+.leaflet-popup button:hover {
+  background: #cc0000;
+}
+
+@media (max-width: 640px) {
+  .search-row {
+    flex-direction: column;
+  }
+}
