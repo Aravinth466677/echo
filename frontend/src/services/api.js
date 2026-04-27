@@ -2,7 +2,6 @@ import axios from 'axios';
 import { clearStoredAuth, getStoredToken, notifyAuthLogout } from '../utils/authStorage.js';
 
 const trimTrailingSlash = (value = '') => value.replace(/\/+$/, '');
-const stripApiSuffix = (value = '') => value.replace(/\/api$/, '');
 
 const API = trimTrailingSlash(process.env.REACT_APP_API_URL || '');
 
@@ -12,7 +11,7 @@ if (!API) {
 
 export { API };
 export const API_BASE_URL = API;
-export const API_ORIGIN = stripApiSuffix(API);
+export const API_ORIGIN = API;
 export const buildApiUrl = (path = '') => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
 const api = axios.create({
@@ -58,39 +57,39 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  register: (data) => api.post('/auth/register', data),
-  login: (data) => api.post('/auth/login', data),
-  authorityLogin: (data) => api.post('/auth/authority-login', data),
+  register: (data) => api.post('/api/auth/register', data),
+  login: (data) => api.post('/api/auth/login', data),
+  authorityLogin: (data) => api.post('/api/auth/authority-login', data),
 };
 
 export const complaintAPI = {
-  submit: (formData) => api.post('/complaints/submit', formData, {
+  submit: (formData) => api.post('/api/complaints/submit', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
-  getMyComplaints: () => api.get('/complaints/my-complaints'),
-  getRoutingHistory: (complaintId) => api.get(`/complaints/routing-history/${complaintId}`),
-  getAreaIssues: (lat, lon, radius) => api.get('/complaints/area-issues', {
+  getMyComplaints: () => api.get('/api/complaints/my-complaints'),
+  getRoutingHistory: (complaintId) => api.get(`/api/complaints/routing-history/${complaintId}`),
+  getAreaIssues: (lat, lon, radius) => api.get('/api/complaints/area-issues', {
     params: { latitude: lat, longitude: lon, radius }
   }),
-  getCategories: () => api.get('/complaints/categories'),
+  getCategories: () => api.get('/api/complaints/categories'),
   // Remote reporting endpoints
-  validateRemoteReport: (data) => api.post('/complaints/validate-remote', data),
-  getUserReportingStats: () => api.get('/complaints/reporting-stats'),
-  getJustificationOptions: () => api.get('/complaints/justification-options'),
+  validateRemoteReport: (data) => api.post('/api/complaints/validate-remote', data),
+  getUserReportingStats: () => api.get('/api/complaints/reporting-stats'),
+  getJustificationOptions: () => api.get('/api/complaints/justification-options'),
   // Secure contact endpoints (Authority/Admin only)
-  getComplaintDetails: (complaintId) => api.get(`/complaints/${complaintId}/details`),
-  getComplaintContact: (complaintId) => api.get(`/complaints/${complaintId}/contact`)
+  getComplaintDetails: (complaintId) => api.get(`/api/complaints/${complaintId}/details`),
+  getComplaintContact: (complaintId) => api.get(`/api/complaints/${complaintId}/contact`)
 };
 
 export const authorityAPI = {
-  getVerificationQueue: () => api.get('/authority/verification-queue'),
-  getActiveIssues: () => api.get('/authority/active-issues'),
-  getIssueDetails: (issueId) => api.get(`/authority/issue/${issueId}`),
-  verifyIssue: (issueId, action) => api.post(`/authority/issue/${issueId}/verify`, { action }),
+  getVerificationQueue: () => api.get('/api/authority/verification-queue'),
+  getActiveIssues: () => api.get('/api/authority/active-issues'),
+  getIssueDetails: (issueId) => api.get(`/api/authority/issue/${issueId}`),
+  verifyIssue: (issueId, action) => api.post(`/api/authority/issue/${issueId}/verify`, { action }),
   updateIssueStatus: (issueId, status, resolutionProofUrl) => 
-    api.post(`/authority/issue/${issueId}/status`, { status, resolutionProofUrl }),
+    api.post(`/api/authority/issue/${issueId}/status`, { status, resolutionProofUrl }),
   updateIssueLocation: (issueId, locationData) =>
-    api.post(`/authority/issue/${issueId}/location`, locationData),
+    api.post(`/api/authority/issue/${issueId}/location`, locationData),
 };
 
 export const analyticsAPI = {
@@ -109,27 +108,27 @@ export const analyticsAPI = {
       params.append('zoom', filters.zoom);
     }
     const queryString = params.toString();
-    return api.get(`/analytics/heatmap${queryString ? '?' + queryString : ''}`);
+    return api.get(`/api/analytics/heatmap${queryString ? '?' + queryString : ''}`);
   },
-  getSummary: () => api.get('/analytics/summary'),
-  getCategories: () => api.get('/analytics/categories'),
+  getSummary: () => api.get('/api/analytics/summary'),
+  getCategories: () => api.get('/api/analytics/categories'),
 };
 
 export const adminAPI = {
-  getAnalytics: () => api.get('/admin/analytics'),
-  createAuthority: (data) => api.post('/admin/authorities', data),
-  getAuthorities: () => api.get('/admin/authorities'),
-  deleteAuthority: (id) => api.delete(`/admin/authorities/${id}`),
-  getSLABreaches: () => api.get('/admin/sla-breaches'),
-  getCategories: () => api.get('/complaints/categories'),
+  getAnalytics: () => api.get('/api/admin/analytics'),
+  createAuthority: (data) => api.post('/api/admin/authorities', data),
+  getAuthorities: () => api.get('/api/admin/authorities'),
+  deleteAuthority: (id) => api.delete(`/api/admin/authorities/${id}`),
+  getSLABreaches: () => api.get('/api/admin/sla-breaches'),
+  getCategories: () => api.get('/api/complaints/categories'),
 };
 
 export const jurisdictionAPI = {
-  create: (data) => api.post('/jurisdictions', data),
-  getAll: () => api.get('/jurisdictions'),
-  delete: (id) => api.delete(`/jurisdictions/${id}`),
-  detect: (data) => api.post('/jurisdiction-detection/detect', data),
-  test: (data) => api.post('/jurisdiction-detection/test', data),
+  create: (data) => api.post('/api/jurisdictions', data),
+  getAll: () => api.get('/api/jurisdictions'),
+  delete: (id) => api.delete(`/api/jurisdictions/${id}`),
+  detect: (data) => api.post('/api/jurisdiction-detection/detect', data),
+  test: (data) => api.post('/api/jurisdiction-detection/test', data),
 };
 
 export default api;

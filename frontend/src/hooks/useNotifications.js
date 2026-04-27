@@ -84,7 +84,7 @@ const useNotifications = (pollingInterval = 60000) => { // Poll every 60 seconds
                 ...(unread_only && { unread_only: 'true' })
             });
             
-            const data = await apiCall(`/notifications?${queryParams}`);
+            const data = await apiCall(`/api/notifications?${queryParams}`);
             
             if (mountedRef.current) {
                 setNotifications(data.notifications || []);
@@ -115,7 +115,7 @@ const useNotifications = (pollingInterval = 60000) => { // Poll every 60 seconds
     // Fetch unread count only
     const fetchUnreadCount = useCallback(async () => {
         try {
-            const data = await apiCall('/notifications/unread-count');
+            const data = await apiCall('/api/notifications/unread-count');
             if (mountedRef.current) {
                 setUnreadCount(data.unread_count || 0);
             }
@@ -133,7 +133,7 @@ const useNotifications = (pollingInterval = 60000) => { // Poll every 60 seconds
     // Mark notification as read
     const markAsRead = useCallback(async (notificationId) => {
         try {
-            await apiCall(`/notifications/${notificationId}/read`, {
+            await apiCall(`/api/notifications/${notificationId}/read`, {
                 method: 'PATCH'
             });
             
@@ -160,7 +160,7 @@ const useNotifications = (pollingInterval = 60000) => { // Poll every 60 seconds
     // Mark all notifications as read
     const markAllAsRead = useCallback(async () => {
         try {
-            const data = await apiCall('/notifications/read-all', {
+            const data = await apiCall('/api/notifications/read-all', {
                 method: 'PATCH'
             });
             
@@ -183,7 +183,7 @@ const useNotifications = (pollingInterval = 60000) => { // Poll every 60 seconds
     // Delete notification
     const deleteNotification = useCallback(async (notificationId) => {
         try {
-            await apiCall(`/notifications/${notificationId}`, {
+            await apiCall(`/api/notifications/${notificationId}`, {
                 method: 'DELETE'
             });
             

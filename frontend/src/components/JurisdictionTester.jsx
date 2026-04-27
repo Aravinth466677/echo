@@ -19,7 +19,7 @@ const JurisdictionTester = () => {
     try {
       console.log('Testing coordinates:', { latitude, longitude });
       
-      const response = await api.get('/jurisdictions/test-point', {
+      const response = await api.get('/api/jurisdictions/test-point', {
         params: { lat: latitude, lon: longitude }
       });
       
