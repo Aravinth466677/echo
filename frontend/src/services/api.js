@@ -4,14 +4,15 @@ import { clearStoredAuth, getStoredToken, notifyAuthLogout } from '../utils/auth
 const trimTrailingSlash = (value = '') => value.replace(/\/+$/, '');
 const stripApiSuffix = (value = '') => value.replace(/\/api$/, '');
 
-const configuredApiUrl = trimTrailingSlash(process.env.REACT_APP_API_URL || '');
+const API = trimTrailingSlash(process.env.REACT_APP_API_URL || '');
 
-if (!configuredApiUrl) {
+if (!API) {
   console.warn('REACT_APP_API_URL is not set. Configure it before running the frontend.');
 }
 
-export const API_BASE_URL = configuredApiUrl;
-export const API_ORIGIN = stripApiSuffix(configuredApiUrl);
+export { API };
+export const API_BASE_URL = API;
+export const API_ORIGIN = stripApiSuffix(API);
 export const buildApiUrl = (path = '') => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
 const api = axios.create({
