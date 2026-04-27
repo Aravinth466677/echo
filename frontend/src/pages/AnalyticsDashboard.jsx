@@ -24,11 +24,17 @@ const AnalyticsDashboard = () => {
     try {
       const [summaryResponse, heatmapResponse] = await Promise.all([
         analyticsAPI.getSummary(),
-        analyticsAPI.getHeatmapData()
+        analyticsAPI.getHeatmapData({ days: 7, categoryId: 'all', status: 'all' })
       ]);
 
-      setSummary(summaryResponse.data.data);
-      setHeatmapData(heatmapResponse.data.data || []);
+      setSummary(summaryResponse.data.summary || summaryResponse.data.data);
+      
+      // Handle heatmap response format
+      if (heatmapResponse.data.success) {
+        setHeatmapData(heatmapResponse.data.clusters || []);
+      } else {
+        setHeatmapData(heatmapResponse.data.data || []);
+      }
     } catch (err) {
       console.error('Analytics data error:', err);
       setError(err.response?.data?.error || 'Failed to load analytics data');

@@ -1,7 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer } from 'react-leaflet';
 import { analyticsAPI } from '../services/api';
 import HeatmapFilters from './HeatmapFilters.jsx';
+import MarkerLayer from './MarkerLayer';
+import 'leaflet/dist/leaflet.css';
 import './ComplaintHeatmap.css';
+
+// Fix for default markers in react-leaflet
+import L from 'leaflet';
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 const ClusteredHeatmap = () => {
   const [heatmapData, setHeatmapData] = useState([]);
@@ -13,128 +25,19 @@ const ClusteredHeatmap = () => {
     days: 7,
     status: 'all'
   });
-  
-  const mapContainerRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const heatLayerRef = useRef(null);
-  const isInitializedRef = useRef(false);
+  const [mapKey, setMapKey] = useState(0); // For forcing map re-render
 
-  const defaultCenter = [11.1271, 78.6569];
+  const defaultCenter = [11.1271, 78.6569]; // Tamil Nadu, India
   const defaultZoom = 7;
 
-  const cleanupMap = () => {
-    if (heatLayerRef.current && mapInstanceRef.current) {
-      try {
-        mapInstanceRef.current.removeLayer(heatLayerRef.current);
-      } catch (e) {
-        console.warn('Error removing heat layer:', e);
-      }
-      heatLayerRef.current = null;
-    }
-    
-    if (mapInstanceRef.current) {
-      try {
-        mapInstanceRef.current.remove();
-      } catch (e) {
-        console.warn('Error removing map:', e);
-      }
-      mapInstanceRef.current = null;
-    }
-    
-    if (mapContainerRef.current) {
-      mapContainerRef.current.innerHTML = '';
-    }
-    
-    isInitializedRef.current = false;
-  };
+  useEffect(() => {
+    loadCategories();
+    loadHeatmapData();
+  }, []);
 
-  const initializeMap = async () => {
-    if (isInitializedRef.current || !mapContainerRef.current) {
-      return;
-    }
-
-    try {
-      if (!window.L) {
-        await loadLeaflet();
-      }
-
-      mapContainerRef.current.innerHTML = '';
-      
-      const map = window.L.map(mapContainerRef.current, {
-        center: defaultCenter,
-        zoom: defaultZoom,
-        zoomControl: true
-      });
-
-      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
-
-      mapInstanceRef.current = map;
-      isInitializedRef.current = true;
-      
-      loadHeatmapData();
-      
-    } catch (error) {
-      console.error('Map initialization failed:', error);
-      setError('Failed to initialize map');
-    }
-  };
-
-  const loadLeaflet = () => {
-    return new Promise((resolve, reject) => {
-      if (window.L) {
-        resolve();
-        return;
-      }
-
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = () => {
-        loadHeatPlugin().then(resolve).catch(reject);
-      };
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  };
-
-  const loadHeatPlugin = () => {
-    return new Promise((resolve) => {
-      if (window.L && window.L.heatLayer) {
-        resolve();
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-      script.onload = resolve;
-      script.onerror = () => {
-        if (window.L) {
-          window.L.heatLayer = function(points) {
-            const group = window.L.layerGroup();
-            points.forEach(point => {
-              const intensity = point[2] || 0.5;
-              const marker = window.L.circleMarker([point[0], point[1]], {
-                radius: Math.max(3, intensity * 15),
-                fillColor: intensity > 0.7 ? '#ff0000' : intensity > 0.4 ? '#ff8800' : '#0088ff',
-                fillOpacity: 0.6,
-                stroke: false
-              });
-              group.addLayer(marker);
-            });
-            return group;
-          };
-        }
-        resolve();
-      };
-      document.head.appendChild(script);
-    });
-  };
+  useEffect(() => {
+    loadHeatmapData();
+  }, [filters]);
 
   const loadCategories = async () => {
     try {
@@ -148,14 +51,11 @@ const ClusteredHeatmap = () => {
   };
 
   const loadHeatmapData = async () => {
-    if (!mapInstanceRef.current) return;
-    
     setLoading(true);
     setError('');
     
     try {
-      const zoom = mapInstanceRef.current.getZoom();
-      const response = await analyticsAPI.getHeatmapData({ ...filters, zoom });
+      const response = await analyticsAPI.getHeatmapData({ ...filters, zoom: defaultZoom });
       
       if (response.data.success) {
         setHeatmapData(response.data.clusters || []);
@@ -170,69 +70,23 @@ const ClusteredHeatmap = () => {
     }
   };
 
-  const updateHeatLayer = () => {
-    if (!mapInstanceRef.current || !window.L || !heatmapData.length) return;
-
-    if (heatLayerRef.current) {
-      try {
-        mapInstanceRef.current.removeLayer(heatLayerRef.current);
-      } catch (e) {
-        console.warn('Error removing layer:', e);
-      }
-    }
-
-    const heatPoints = heatmapData.map(cluster => [
-      cluster.lat,
-      cluster.lng,
-      Math.min(cluster.count / 10, 1)
-    ]);
-
-    const heatLayer = window.L.heatLayer(heatPoints, {
-      radius: 25,
-      blur: 15,
-      maxZoom: 17
-    });
-
-    heatLayer.addTo(mapInstanceRef.current);
-    heatLayerRef.current = heatLayer;
-
-    if (heatPoints.length > 0) {
-      const bounds = window.L.latLngBounds(heatPoints.map(p => [p[0], p[1]]));
-      mapInstanceRef.current.fitBounds(bounds.pad(0.1));
-    }
-  };
-
-  useEffect(() => {
-    loadCategories();
-    initializeMap();
-    
-    return () => {
-      cleanupMap();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (mapInstanceRef.current) {
-      loadHeatmapData();
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    updateHeatLayer();
-  }, [heatmapData]);
+  // Transform backend data to marker format
+  const transformedData = heatmapData.map(cluster => ({
+    lat: cluster.lat,
+    lng: cluster.lng,
+    count: cluster.count // Use actual count instead of intensity
+  }));
 
   const handleFiltersChange = (newFilters) => {
     setFilters(newFilters);
   };
 
   const handleRetry = () => {
-    cleanupMap();
-    setTimeout(() => {
-      initializeMap();
-    }, 100);
+    setMapKey(prev => prev + 1); // Force map re-render
+    loadHeatmapData();
   };
 
-  if (error && !mapInstanceRef.current) {
+  if (error && heatmapData.length === 0) {
     return (
       <div className="heatmap-container">
         <div className="heatmap-error">
@@ -258,15 +112,39 @@ const ClusteredHeatmap = () => {
         {loading && (
           <div className="heatmap-loading">
             <div className="spinner"></div>
-            <p>Loading heatmap...</p>
+            <p>Loading complaint locations...</p>
           </div>
         )}
         
-        <div 
-          ref={mapContainerRef}
-          className="heatmap-map"
+        <MapContainer
+          key={mapKey}
+          center={defaultCenter}
+          zoom={defaultZoom}
           style={{ height: '500px', width: '100%' }}
-        />
+          className="heatmap-map"
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+          
+          {!loading && transformedData.length > 0 && (
+            <MarkerLayer 
+              points={transformedData}
+              options={{
+                showCount: true,
+                minRadius: 15,
+                maxRadius: 40,
+                colors: {
+                  low: '#3388ff',     // Blue for 1-2 complaints
+                  medium: '#ff8800',  // Orange for 3-9 complaints
+                  high: '#ff0000'     // Red for 10+ complaints
+                },
+                fitBounds: true
+              }}
+            />
+          )}
+        </MapContainer>
         
         {!loading && heatmapData.length === 0 && (
           <div className="heatmap-empty">
@@ -276,7 +154,7 @@ const ClusteredHeatmap = () => {
         
         {!loading && heatmapData.length > 0 && (
           <div className="heatmap-info">
-            <p>{heatmapData.reduce((sum, cluster) => sum + cluster.count, 0)} complaints in {heatmapData.length} clusters</p>
+            <p>{heatmapData.reduce((sum, cluster) => sum + cluster.count, 0)} complaints in {heatmapData.length} locations</p>
           </div>
         )}
       </div>
@@ -285,4 +163,3 @@ const ClusteredHeatmap = () => {
 };
 
 export default ClusteredHeatmap;
-// trigger rebuild

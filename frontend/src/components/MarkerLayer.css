@@ -1,0 +1,55 @@
+/* Complaint Count Marker Styles */
+.complaint-count-label {
+  background: transparent !important;
+  border: none !important;
+}
+
+.complaint-count-label div {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  text-align: center;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.complaint-count-label:hover div {
+  transform: scale(1.1);
+}
+
+/* Legend updates for marker view */
+.heatmap-legend .legend-items {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.heatmap-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.heatmap-legend .legend-note {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+  margin: 10px 0 0 0;
+  font-style: italic;
+}
+
+/* Leaflet popup customization for complaint markers */
+.leaflet-popup-content {
+  margin: 8px 12px;
+  line-height: 1.4;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+}
+
+.leaflet-popup-tip {
+  background: white;
+}

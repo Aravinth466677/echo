@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer } from 'react-leaflet';
 import { analyticsAPI } from '../services/api';
 import HeatmapFilters from './HeatmapFilters.jsx';
+import MarkerLayer from './MarkerLayer';
 import 'leaflet/dist/leaflet.css';
 import './ComplaintHeatmap.css';
 
@@ -23,11 +25,7 @@ const ComplaintHeatmap = () => {
     days: 7,
     status: 'all'
   });
-  
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const heatLayerRef = useRef(null);
-  const containerRef = useRef(null);
+  const [mapKey, setMapKey] = useState(0); // For forcing map re-render
 
   // Default center for Tamil Nadu, India
   const defaultCenter = [11.1271, 78.6569];
@@ -35,56 +33,12 @@ const ComplaintHeatmap = () => {
 
   useEffect(() => {
     loadCategories();
-    initializeMap();
-    
-    return () => {
-      cleanup();
-    };
+    loadHeatmapData();
   }, []);
 
   useEffect(() => {
-    if (mapInstanceRef.current) {
-      loadHeatmapData();
-    }
+    loadHeatmapData();
   }, [filters]);
-
-  useEffect(() => {
-    if (mapInstanceRef.current && heatmapData.length > 0) {
-      updateHeatLayer();
-    }
-  }, [heatmapData]);
-
-  const cleanup = () => {
-    if (heatLayerRef.current && mapInstanceRef.current) {
-      mapInstanceRef.current.removeLayer(heatLayerRef.current);
-      heatLayerRef.current = null;
-    }
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
-      mapInstanceRef.current = null;
-    }
-  };
-
-  const initializeMap = async () => {
-    if (mapInstanceRef.current || !containerRef.current) return;
-    
-    // Load leaflet.heat first
-    await loadLeafletHeat();
-    
-    try {
-      const map = L.map(containerRef.current).setView(defaultCenter, defaultZoom);
-      
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(map);
-      
-      mapInstanceRef.current = map;
-      loadHeatmapData();
-    } catch (error) {
-      console.error('Map initialization error:', error);
-      setError('Failed to initialize map');
-    }
-  };
 
   const loadCategories = async () => {
     try {
@@ -102,8 +56,7 @@ const ComplaintHeatmap = () => {
     setError('');
     
     try {
-      const zoom = mapInstanceRef.current ? mapInstanceRef.current.getZoom() : defaultZoom;
-      const response = await analyticsAPI.getHeatmapData({ ...filters, zoom });
+      const response = await analyticsAPI.getHeatmapData({ ...filters, zoom: defaultZoom });
       if (response.data.success) {
         setHeatmapData(response.data.clusters || []);
       } else {
@@ -117,95 +70,28 @@ const ComplaintHeatmap = () => {
     }
   };
 
-  const updateHeatLayer = () => {
-    if (!mapInstanceRef.current || !window.L.heatLayer) return;
-
-    // Remove existing heat layer
-    if (heatLayerRef.current) {
-      mapInstanceRef.current.removeLayer(heatLayerRef.current);
-      heatLayerRef.current = null;
-    }
-
-    // Convert clusters to heat layer format: [lat, lng, intensity]
-    const heatPoints = heatmapData.map(cluster => [
-      cluster.lat,
-      cluster.lng,
-      Math.min(cluster.count / 10, 1) // Scale intensity based on cluster size
-    ]);
-
-    // Create new heat layer
-    const newHeatLayer = L.heatLayer(heatPoints, {
-      radius: 25,
-      blur: 15,
-      maxZoom: 17,
-      gradient: {
-        0.0: 'blue',
-        0.2: 'cyan',
-        0.4: 'lime',
-        0.6: 'yellow',
-        0.8: 'orange',
-        1.0: 'red'
-      }
-    });
-
-    newHeatLayer.addTo(mapInstanceRef.current);
-    heatLayerRef.current = newHeatLayer;
-
-    // Fit map to data bounds if we have points
-    if (heatPoints.length > 0) {
-      const group = new L.featureGroup(
-        heatPoints.map(point => L.marker([point[0], point[1]]))
-      );
-      mapInstanceRef.current.fitBounds(group.getBounds().pad(0.1));
-    }
-  };
-
-  const loadLeafletHeat = () => {
-    return new Promise((resolve, reject) => {
-      if (window.L && window.L.heatLayer) {
-        resolve();
-        return;
-      }
-
-      // Try to load from CDN, fallback to inline implementation
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-      script.onload = resolve;
-      script.onerror = () => {
-        // Fallback: Simple inline heatmap implementation
-        console.warn('CDN blocked, using fallback heatmap');
-        if (window.L && !window.L.heatLayer) {
-          // Minimal heatmap fallback - just show markers
-          window.L.heatLayer = function(points, options) {
-            const group = L.layerGroup();
-            points.forEach(point => {
-              const marker = L.circleMarker([point[0], point[1]], {
-                radius: Math.max(5, (point[2] || 0.5) * 20),
-                fillColor: point[2] > 0.7 ? 'red' : point[2] > 0.4 ? 'orange' : 'blue',
-                fillOpacity: 0.6,
-                stroke: false
-              });
-              group.addLayer(marker);
-            });
-            return group;
-          };
-        }
-        resolve();
-      };
-      document.head.appendChild(script);
-    });
-  };
+  // Transform clusters to marker format
+  const transformedData = heatmapData.map(cluster => ({
+    lat: cluster.lat,
+    lng: cluster.lng,
+    count: cluster.count // Use actual count
+  }));
 
   const handleFiltersChange = (newFilters) => {
     setFilters(newFilters);
   };
 
-  if (error) {
+  const handleRetry = () => {
+    setMapKey(prev => prev + 1); // Force map re-render
+    loadHeatmapData();
+  };
+
+  if (error && heatmapData.length === 0) {
     return (
       <div className="heatmap-container">
         <div className="heatmap-error">
           <p>{error}</p>
-          <button onClick={loadHeatmapData} className="retry-btn">
+          <button onClick={handleRetry} className="retry-btn">
             Retry
           </button>
         </div>
@@ -228,15 +114,39 @@ const ComplaintHeatmap = () => {
         {loading && (
           <div className="heatmap-loading">
             <div className="spinner"></div>
-            <p>Loading heatmap...</p>
+            <p>Loading complaint locations...</p>
           </div>
         )}
         
-        <div 
-          ref={containerRef}
-          className="heatmap-map"
+        <MapContainer
+          key={mapKey}
+          center={defaultCenter}
+          zoom={defaultZoom}
           style={{ height: '500px', width: '100%' }}
-        />
+          className="heatmap-map"
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+          
+          {!loading && transformedData.length > 0 && (
+            <MarkerLayer 
+              points={transformedData}
+              options={{
+                showCount: true,
+                minRadius: 15,
+                maxRadius: 40,
+                colors: {
+                  low: '#3388ff',     // Blue for 1-2 complaints
+                  medium: '#ff8800',  // Orange for 3-9 complaints  
+                  high: '#ff0000'     // Red for 10+ complaints
+                },
+                fitBounds: true
+              }}
+            />
+          )}
+        </MapContainer>
         
         {!loading && heatmapData.length === 0 && (
           <div className="heatmap-empty">
@@ -246,7 +156,7 @@ const ComplaintHeatmap = () => {
         
         {!loading && heatmapData.length > 0 && (
           <div className="heatmap-info">
-            <p>{heatmapData.reduce((sum, cluster) => sum + cluster.count, 0)} complaints in {heatmapData.length} clusters</p>
+            <p>{heatmapData.reduce((sum, cluster) => sum + cluster.count, 0)} complaints in {heatmapData.length} locations</p>
           </div>
         )}
       </div>

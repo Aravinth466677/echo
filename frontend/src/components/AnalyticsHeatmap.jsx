@@ -1,131 +1,82 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
+import { MapContainer, TileLayer } from 'react-leaflet';
+import MarkerLayer from './MarkerLayer';
+import 'leaflet/dist/leaflet.css';
+
+// Fix for default markers in react-leaflet
+import L from 'leaflet';
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 const AnalyticsHeatmap = ({ data }) => {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const heatLayerRef = useRef(null);
+  // Default center (Tamil Nadu, India - adjust as needed)
+  const defaultCenter = [11.1271, 78.6569];
+  const defaultZoom = 7;
 
-  useEffect(() => {
-    // Load Leaflet dynamically
-    const loadLeaflet = async () => {
-      if (typeof window === 'undefined') return;
-
-      // Load Leaflet CSS
-      if (!document.querySelector('link[href*="leaflet.css"]')) {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-      }
-
-      // Load Leaflet JS
-      if (!window.L) {
-        await new Promise((resolve) => {
-          const script = document.createElement('script');
-          script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-          script.onload = resolve;
-          document.head.appendChild(script);
-        });
-      }
-
-      // Load Leaflet Heatmap plugin
-      if (!window.L.heatLayer) {
-        await new Promise((resolve) => {
-          const script = document.createElement('script');
-          script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-          script.onload = resolve;
-          document.head.appendChild(script);
-        });
-      }
-
-      initializeMap();
+  // Transform data to marker format if needed
+  const transformedData = data?.map(point => {
+    if (Array.isArray(point)) {
+      // Already in [lat, lng, intensity] format - convert to object
+      return {
+        lat: point[0],
+        lng: point[1],
+        count: Math.round((point[2] || 0.5) * 10) // Convert intensity back to count
+      };
+    }
+    
+    // Transform from backend format to marker format
+    return {
+      lat: point.latitude || point.lat,
+      lng: point.longitude || point.lng || point.lon,
+      count: point.count || Math.round((point.intensity || 0.5) * 10)
     };
-
-    loadLeaflet();
-
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (mapInstanceRef.current && window.L && data.length > 0) {
-      updateHeatmap();
-    }
-  }, [data]);
-
-  const initializeMap = () => {
-    if (!mapRef.current || !window.L) return;
-
-    // Default center (can be adjusted based on your region)
-    const defaultCenter = [40.7128, -74.0060]; // New York City
-    const defaultZoom = 10;
-
-    // Create map
-    mapInstanceRef.current = window.L.map(mapRef.current).setView(defaultCenter, defaultZoom);
-
-    // Add tile layer
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 18
-    }).addTo(mapInstanceRef.current);
-
-    // Initialize heatmap if data exists
-    if (data.length > 0) {
-      updateHeatmap();
-    }
-  };
-
-  const updateHeatmap = () => {
-    if (!mapInstanceRef.current || !window.L.heatLayer || data.length === 0) return;
-
-    // Remove existing heat layer
-    if (heatLayerRef.current) {
-      mapInstanceRef.current.removeLayer(heatLayerRef.current);
-    }
-
-    // Create new heat layer
-    heatLayerRef.current = window.L.heatLayer(data, {
-      radius: 25,
-      blur: 15,
-      maxZoom: 17,
-      gradient: {
-        0.0: 'blue',
-        0.2: 'cyan',
-        0.4: 'lime',
-        0.6: 'yellow',
-        0.8: 'orange',
-        1.0: 'red'
-      }
-    }).addTo(mapInstanceRef.current);
-
-    // Fit map to data bounds if we have data points
-    if (data.length > 0) {
-      const group = new window.L.featureGroup(data.map(point => 
-        window.L.marker([point[0], point[1]])
-      ));
-      mapInstanceRef.current.fitBounds(group.getBounds().pad(0.1));
-    }
-  };
+  }) || [];
 
   return (
     <div className="heatmap-wrapper">
-      <div 
-        ref={mapRef} 
-        className="heatmap-container"
+      <MapContainer
+        center={defaultCenter}
+        zoom={defaultZoom}
         style={{ height: '400px', width: '100%', borderRadius: '8px' }}
-      />
-      {data.length === 0 && (
+        className="heatmap-container"
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          maxZoom={18}
+        />
+        
+        {transformedData.length > 0 && (
+          <MarkerLayer 
+            points={transformedData}
+            options={{
+              showCount: true,
+              minRadius: 15,
+              maxRadius: 40,
+              colors: {
+                low: '#3388ff',     // Blue for 1-2 complaints
+                medium: '#ff8800',  // Orange for 3-9 complaints
+                high: '#ff0000'     // Red for 10+ complaints
+              },
+              fitBounds: true
+            }}
+          />
+        )}
+      </MapContainer>
+      
+      {transformedData.length === 0 && (
         <div className="heatmap-empty">
           <p>No complaint data available for the last 7 days</p>
         </div>
       )}
-      {data.length > 0 && (
+      
+      {transformedData.length > 0 && (
         <div className="heatmap-info">
-          <p>{data.length} complaint locations shown</p>
+          <p>{transformedData.reduce((sum, item) => sum + item.count, 0)} complaints in {transformedData.length} locations</p>
         </div>
       )}
     </div>
