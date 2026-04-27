@@ -17,6 +17,7 @@ const validationRoutes = require('./routes/validation');
 const { startEscalationScheduler } = require('./services/escalationService');
 const slaMonitor = require('./services/slaMonitor');
 const SLAService = require('./services/slaService');
+const pool = require('./config/database');
 
 const app = express();
 
@@ -87,6 +88,10 @@ server.on('error', (error) => {
 
 const startServer = async () => {
   try {
+    if (!pool.isConfigured) {
+      throw new Error(pool.configurationError);
+    }
+
     await SLAService.ensureDatabaseFunctions();
 
     server.listen(PORT, () => {
@@ -100,7 +105,14 @@ const startServer = async () => {
       console.log('SLA monitoring system started');
     });
   } catch (error) {
-    console.error('Failed to initialize SLA database functions:', error);
+    console.error('Failed to initialize database-dependent services:', error);
+
+    if (error.code === 'ECONNREFUSED') {
+      console.error(
+        'PostgreSQL refused the connection. On Render, set DATABASE_URL to your Render Postgres connection string instead of relying on localhost.'
+      );
+    }
+
     process.exit(1);
   }
 };
