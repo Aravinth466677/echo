@@ -1,50 +1,22 @@
 import axios from 'axios';
 import { clearStoredAuth, getStoredToken, notifyAuthLogout } from '../utils/authStorage.js';
 
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
-
 const trimTrailingSlash = (value = '') => value.replace(/\/+$/, '');
-
 const stripApiSuffix = (value = '') => value.replace(/\/api$/, '');
 
-const isLocalHostname = (hostname = '') => LOCAL_HOSTNAMES.has(hostname.toLowerCase());
+const configuredApiUrl = trimTrailingSlash(process.env.REACT_APP_API_URL || '');
 
-// Default to the local backend during development, but avoid baking localhost into public deployments.
-const resolveApiBaseUrl = () => {
-  const configuredApiUrl = trimTrailingSlash(process.env.REACT_APP_API_URL || '');
-  if (configuredApiUrl) {
-    return configuredApiUrl;
-  }
+if (!configuredApiUrl) {
+  console.warn('REACT_APP_API_URL is not set. Configure it before running the frontend.');
+}
 
-  if (typeof window === 'undefined') {
-    return 'http://localhost:5000/api';
-  }
-
-  return isLocalHostname(window.location.hostname)
-    ? 'http://localhost:5000/api'
-    : `${window.location.origin}/api`;
-};
-
-const resolveApiOrigin = () => {
-  const configuredApiUrl = trimTrailingSlash(process.env.REACT_APP_API_URL || '');
-  if (configuredApiUrl) {
-    return stripApiSuffix(configuredApiUrl);
-  }
-
-  if (typeof window === 'undefined') {
-    return 'http://localhost:5000';
-  }
-
-  return isLocalHostname(window.location.hostname)
-    ? 'http://localhost:5000'
-    : window.location.origin;
-};
-
-export const API_BASE_URL = resolveApiBaseUrl();
-export const API_ORIGIN = resolveApiOrigin();
+export const API_BASE_URL = configuredApiUrl;
+export const API_ORIGIN = stripApiSuffix(configuredApiUrl);
+export const buildApiUrl = (path = '') => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
 });
 
 // Add token to all requests

@@ -1,1 +1,318 @@
-import React, { useState, useEffect } from 'react';\nimport './ComplaintTimeline.css';\n\nconst ComplaintTimeline = ({ complaintId, isPublic = false, className = '' }) => {\n  const [timeline, setTimeline] = useState([]);\n  const [complaint, setComplaint] = useState(null);\n  const [statistics, setStatistics] = useState(null);\n  const [loading, setLoading] = useState(true);\n  const [error, setError] = useState(null);\n  const [expandedEntries, setExpandedEntries] = useState(new Set());\n\n  useEffect(() => {\n    if (complaintId) {\n      fetchTimeline();\n    }\n  }, [complaintId, isPublic]);\n\n  const fetchTimeline = async () => {\n    try {\n      setLoading(true);\n      setError(null);\n\n      const endpoint = isPublic \n        ? `/api/public/complaints/${complaintId}/timeline`\n        : `/api/complaints/${complaintId}/history`;\n\n      const headers = {};\n      if (!isPublic) {\n        const token = localStorage.getItem('token');\n        if (token) {\n          headers.Authorization = `Bearer ${token}`;\n        }\n      }\n\n      const response = await fetch(endpoint, { headers });\n      \n      if (!response.ok) {\n        throw new Error(`Failed to fetch timeline: ${response.statusText}`);\n      }\n\n      const data = await response.json();\n      \n      setTimeline(data.timeline || []);\n      setComplaint(data.complaint);\n      setStatistics(data.statistics);\n      \n    } catch (err) {\n      console.error('Timeline fetch error:', err);\n      setError(err.message);\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const formatTimeAgo = (timestamp) => {\n    const now = new Date();\n    const time = new Date(timestamp);\n    const diffInSeconds = Math.floor((now - time) / 1000);\n\n    if (diffInSeconds < 60) return 'Just now';\n    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;\n    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;\n    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;\n    \n    return time.toLocaleDateString();\n  };\n\n  const getActionIcon = (action, role) => {\n    const iconMap = {\n      'CREATED': '📝',\n      'STATUS_CHANGE': '🔄',\n      'ASSIGNED': '👤',\n      'VERIFIED': '✅',\n      'REJECTED': '❌',\n      'RESOLVED': '🎯',\n      'ESCALATED': '⬆️',\n      'CLOSED': '🔒',\n      'COMMENT_ADDED': '💬',\n      'EVIDENCE_ADDED': '📎'\n    };\n\n    return iconMap[action] || '📋';\n  };\n\n  const getActionColor = (action, newStatus) => {\n    const colorMap = {\n      'CREATED': 'blue',\n      'ASSIGNED': 'purple',\n      'VERIFIED': 'green',\n      'RESOLVED': 'green',\n      'REJECTED': 'red',\n      'ESCALATED': 'orange',\n      'CLOSED': 'gray',\n      'COMMENT_ADDED': 'blue',\n      'EVIDENCE_ADDED': 'blue'\n    };\n\n    // Status-based colors\n    if (newStatus) {\n      const statusColors = {\n        'submitted': 'blue',\n        'assigned': 'purple',\n        'in_progress': 'orange',\n        'resolved': 'green',\n        'verified': 'green',\n        'rejected': 'red',\n        'closed': 'gray',\n        'escalated': 'orange'\n      };\n      return statusColors[newStatus] || colorMap[action] || 'gray';\n    }\n\n    return colorMap[action] || 'gray';\n  };\n\n  const getRoleBadgeColor = (role) => {\n    const roleColors = {\n      'CITIZEN': 'bg-blue-100 text-blue-800',\n      'AUTHORITY': 'bg-purple-100 text-purple-800',\n      'ADMIN': 'bg-red-100 text-red-800',\n      'SYSTEM': 'bg-gray-100 text-gray-800'\n    };\n    return roleColors[role] || 'bg-gray-100 text-gray-800';\n  };\n\n  const toggleExpanded = (entryId) => {\n    const newExpanded = new Set(expandedEntries);\n    if (newExpanded.has(entryId)) {\n      newExpanded.delete(entryId);\n    } else {\n      newExpanded.add(entryId);\n    }\n    setExpandedEntries(newExpanded);\n  };\n\n  const getStatusChangeText = (oldStatus, newStatus) => {\n    if (!oldStatus && newStatus) {\n      return `Status set to ${newStatus}`;\n    }\n    if (oldStatus && newStatus) {\n      return `${oldStatus} → ${newStatus}`;\n    }\n    return '';\n  };\n\n  if (loading) {\n    return (\n      <div className={`complaint-timeline loading ${className}`}>\n        <div className=\"timeline-header\">\n          <div className=\"skeleton-line\"></div>\n          <div className=\"skeleton-line short\"></div>\n        </div>\n        <div className=\"timeline-content\">\n          {[1, 2, 3].map(i => (\n            <div key={i} className=\"timeline-entry skeleton\">\n              <div className=\"timeline-marker skeleton-circle\"></div>\n              <div className=\"timeline-content-item\">\n                <div className=\"skeleton-line\"></div>\n                <div className=\"skeleton-line short\"></div>\n              </div>\n            </div>\n          ))}\n        </div>\n      </div>\n    );\n  }\n\n  if (error) {\n    return (\n      <div className={`complaint-timeline error ${className}`}>\n        <div className=\"error-message\">\n          <span className=\"error-icon\">⚠️</span>\n          <div>\n            <h4>Failed to load timeline</h4>\n            <p>{error}</p>\n            <button onClick={fetchTimeline} className=\"retry-button\">\n              Try Again\n            </button>\n          </div>\n        </div>\n      </div>\n    );\n  }\n\n  return (\n    <div className={`complaint-timeline ${className}`}>\n      {/* Header */}\n      <div className=\"timeline-header\">\n        <h3>📋 Complaint Timeline</h3>\n        {complaint && (\n          <div className=\"complaint-info\">\n            <span className=\"complaint-id\">#{complaint.id}</span>\n            <span className=\"complaint-category\">{complaint.categoryName}</span>\n            <span className={`complaint-status status-${complaint.status}`}>\n              {complaint.status}\n            </span>\n          </div>\n        )}\n      </div>\n\n      {/* Statistics (non-public view) */}\n      {!isPublic && statistics && (\n        <div className=\"timeline-stats\">\n          <div className=\"stat-item\">\n            <span className=\"stat-value\">{statistics.totalActions}</span>\n            <span className=\"stat-label\">Total Actions</span>\n          </div>\n          <div className=\"stat-item\">\n            <span className=\"stat-value\">{statistics.statusChanges}</span>\n            <span className=\"stat-label\">Status Changes</span>\n          </div>\n          <div className=\"stat-item\">\n            <span className=\"stat-value\">{statistics.uniqueActors}</span>\n            <span className=\"stat-label\">People Involved</span>\n          </div>\n        </div>\n      )}\n\n      {/* Timeline */}\n      <div className=\"timeline-content\">\n        {timeline.length === 0 ? (\n          <div className=\"empty-timeline\">\n            <span className=\"empty-icon\">📭</span>\n            <p>No timeline entries found</p>\n          </div>\n        ) : (\n          timeline.map((entry, index) => {\n            const isExpanded = expandedEntries.has(entry.id);\n            const actionColor = getActionColor(entry.action, entry.newStatus);\n            const isLast = index === timeline.length - 1;\n\n            return (\n              <div key={entry.id || index} className={`timeline-entry ${isLast ? 'last' : ''}`}>\n                {/* Timeline marker */}\n                <div className={`timeline-marker color-${actionColor}`}>\n                  <span className=\"marker-icon\">\n                    {getActionIcon(entry.action, entry.role)}\n                  </span>\n                </div>\n\n                {/* Timeline content */}\n                <div className=\"timeline-content-item\">\n                  <div className=\"timeline-header-row\">\n                    <div className=\"timeline-main-info\">\n                      <h4 className=\"timeline-title\">{entry.description}</h4>\n                      <div className=\"timeline-meta\">\n                        <span className={`role-badge ${getRoleBadgeColor(entry.role)}`}>\n                          {entry.role}\n                        </span>\n                        {!isPublic && entry.changedBy && (\n                          <span className=\"changed-by\">by {entry.changedBy}</span>\n                        )}\n                        <span className=\"timestamp\">{formatTimeAgo(entry.timestamp)}</span>\n                      </div>\n                    </div>\n                    \n                    {/* Status change indicator */}\n                    {(entry.oldStatus || entry.newStatus) && (\n                      <div className=\"status-change\">\n                        <span className=\"status-change-text\">\n                          {getStatusChangeText(entry.oldStatus, entry.newStatus)}\n                        </span>\n                      </div>\n                    )}\n                  </div>\n\n                  {/* Expandable details */}\n                  {(entry.remarks || (!isPublic && entry.metadata)) && (\n                    <div className=\"timeline-expandable\">\n                      <button \n                        onClick={() => toggleExpanded(entry.id)}\n                        className=\"expand-button\"\n                      >\n                        {isExpanded ? '▼ Hide Details' : '▶ Show Details'}\n                      </button>\n                      \n                      {isExpanded && (\n                        <div className=\"timeline-details\">\n                          {entry.remarks && (\n                            <div className=\"detail-item\">\n                              <strong>Remarks:</strong>\n                              <p>{entry.remarks}</p>\n                            </div>\n                          )}\n                          \n                          {!isPublic && entry.metadata && (\n                            <div className=\"detail-item\">\n                              <strong>Additional Details:</strong>\n                              <pre className=\"metadata\">\n                                {JSON.stringify(entry.metadata, null, 2)}\n                              </pre>\n                            </div>\n                          )}\n                          \n                          <div className=\"detail-item\">\n                            <strong>Exact Time:</strong>\n                            <span>{new Date(entry.timestamp).toLocaleString()}</span>\n                          </div>\n                        </div>\n                      )}\n                    </div>\n                  )}\n                </div>\n              </div>\n            );\n          })\n        )}\n      </div>\n\n      {/* Footer */}\n      <div className=\"timeline-footer\">\n        <span className=\"timeline-count\">\n          {timeline.length} {timeline.length === 1 ? 'entry' : 'entries'}\n        </span>\n        {!isPublic && (\n          <button onClick={fetchTimeline} className=\"refresh-button\">\n            🔄 Refresh\n          </button>\n        )}\n      </div>\n    </div>\n  );\n};\n\nexport default ComplaintTimeline;
+import React, { useEffect, useState } from 'react';
+import './ComplaintTimeline.css';
+import { buildApiUrl } from '../services/api.js';
+import { getStoredToken } from '../utils/authStorage.js';
+
+const ComplaintTimeline = ({ complaintId, isPublic = false, className = '' }) => {
+  const [timeline, setTimeline] = useState([]);
+  const [complaint, setComplaint] = useState(null);
+  const [statistics, setStatistics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expandedEntries, setExpandedEntries] = useState(new Set());
+
+  useEffect(() => {
+    if (complaintId) {
+      fetchTimeline();
+    }
+  }, [complaintId, isPublic]);
+
+  const fetchTimeline = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const endpoint = isPublic
+        ? `/api/public/complaints/${complaintId}/timeline`
+        : `/api/complaints/${complaintId}/history`;
+
+      const headers = {};
+      if (!isPublic) {
+        const token = getStoredToken();
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+      }
+
+      const response = await fetch(buildApiUrl(endpoint), {
+        credentials: 'include',
+        headers
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch timeline: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      setTimeline(data.timeline || []);
+      setComplaint(data.complaint);
+      setStatistics(data.statistics);
+    } catch (err) {
+      console.error('Timeline fetch error:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTimeAgo = (timestamp) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInSeconds = Math.floor((now - time) / 1000);
+
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+
+    return time.toLocaleDateString();
+  };
+
+  const getActionIcon = (action) => {
+    const iconMap = {
+      CREATED: '📝',
+      STATUS_CHANGE: '🔄',
+      ASSIGNED: '👤',
+      VERIFIED: '✅',
+      REJECTED: '❌',
+      RESOLVED: '🎯',
+      ESCALATED: '⬆️',
+      CLOSED: '🔒',
+      COMMENT_ADDED: '💬',
+      EVIDENCE_ADDED: '📎'
+    };
+
+    return iconMap[action] || '📋';
+  };
+
+  const getActionColor = (action, newStatus) => {
+    const colorMap = {
+      CREATED: 'blue',
+      ASSIGNED: 'purple',
+      VERIFIED: 'green',
+      RESOLVED: 'green',
+      REJECTED: 'red',
+      ESCALATED: 'orange',
+      CLOSED: 'gray',
+      COMMENT_ADDED: 'blue',
+      EVIDENCE_ADDED: 'blue'
+    };
+
+    if (newStatus) {
+      const statusColors = {
+        submitted: 'blue',
+        assigned: 'purple',
+        in_progress: 'orange',
+        resolved: 'green',
+        verified: 'green',
+        rejected: 'red',
+        closed: 'gray',
+        escalated: 'orange'
+      };
+      return statusColors[newStatus] || colorMap[action] || 'gray';
+    }
+
+    return colorMap[action] || 'gray';
+  };
+
+  const getRoleBadgeColor = (role) => {
+    const roleColors = {
+      CITIZEN: 'bg-blue-100 text-blue-800',
+      AUTHORITY: 'bg-purple-100 text-purple-800',
+      ADMIN: 'bg-red-100 text-red-800',
+      SYSTEM: 'bg-gray-100 text-gray-800'
+    };
+    return roleColors[role] || 'bg-gray-100 text-gray-800';
+  };
+
+  const toggleExpanded = (entryId) => {
+    const nextExpanded = new Set(expandedEntries);
+    if (nextExpanded.has(entryId)) {
+      nextExpanded.delete(entryId);
+    } else {
+      nextExpanded.add(entryId);
+    }
+    setExpandedEntries(nextExpanded);
+  };
+
+  const getStatusChangeText = (oldStatus, newStatus) => {
+    if (!oldStatus && newStatus) {
+      return `Status set to ${newStatus}`;
+    }
+    if (oldStatus && newStatus) {
+      return `${oldStatus} → ${newStatus}`;
+    }
+    return '';
+  };
+
+  if (loading) {
+    return (
+      <div className={`complaint-timeline loading ${className}`}>
+        <div className="timeline-header">
+          <div className="skeleton-line"></div>
+          <div className="skeleton-line short"></div>
+        </div>
+        <div className="timeline-content">
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="timeline-entry skeleton">
+              <div className="timeline-marker skeleton-circle"></div>
+              <div className="timeline-content-item">
+                <div className="skeleton-line"></div>
+                <div className="skeleton-line short"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`complaint-timeline error ${className}`}>
+        <div className="error-message">
+          <span className="error-icon">⚠️</span>
+          <div>
+            <h4>Failed to load timeline</h4>
+            <p>{error}</p>
+            <button onClick={fetchTimeline} className="retry-button">
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`complaint-timeline ${className}`}>
+      <div className="timeline-header">
+        <h3>📋 Complaint Timeline</h3>
+        {complaint && (
+          <div className="complaint-info">
+            <span className="complaint-id">#{complaint.id}</span>
+            <span className="complaint-category">{complaint.categoryName}</span>
+            <span className={`complaint-status status-${complaint.status}`}>
+              {complaint.status}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {!isPublic && statistics && (
+        <div className="timeline-stats">
+          <div className="stat-item">
+            <span className="stat-value">{statistics.totalActions}</span>
+            <span className="stat-label">Total Actions</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{statistics.statusChanges}</span>
+            <span className="stat-label">Status Changes</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{statistics.uniqueActors}</span>
+            <span className="stat-label">People Involved</span>
+          </div>
+        </div>
+      )}
+
+      <div className="timeline-content">
+        {timeline.length === 0 ? (
+          <div className="empty-timeline">
+            <span className="empty-icon">📭</span>
+            <p>No timeline entries found</p>
+          </div>
+        ) : (
+          timeline.map((entry, index) => {
+            const isExpanded = expandedEntries.has(entry.id);
+            const actionColor = getActionColor(entry.action, entry.newStatus);
+            const isLast = index === timeline.length - 1;
+
+            return (
+              <div key={entry.id || index} className={`timeline-entry ${isLast ? 'last' : ''}`}>
+                <div className={`timeline-marker color-${actionColor}`}>
+                  <span className="marker-icon">{getActionIcon(entry.action)}</span>
+                </div>
+
+                <div className="timeline-content-item">
+                  <div className="timeline-header-row">
+                    <div className="timeline-main-info">
+                      <h4 className="timeline-title">{entry.description}</h4>
+                      <div className="timeline-meta">
+                        <span className={`role-badge ${getRoleBadgeColor(entry.role)}`}>
+                          {entry.role}
+                        </span>
+                        {!isPublic && entry.changedBy && (
+                          <span className="changed-by">by {entry.changedBy}</span>
+                        )}
+                        <span className="timestamp">{formatTimeAgo(entry.timestamp)}</span>
+                      </div>
+                    </div>
+
+                    {(entry.oldStatus || entry.newStatus) && (
+                      <div className="status-change">
+                        <span className="status-change-text">
+                          {getStatusChangeText(entry.oldStatus, entry.newStatus)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {(entry.remarks || (!isPublic && entry.metadata)) && (
+                    <div className="timeline-expandable">
+                      <button
+                        onClick={() => toggleExpanded(entry.id)}
+                        className="expand-button"
+                      >
+                        {isExpanded ? '▼ Hide Details' : '▶ Show Details'}
+                      </button>
+
+                      {isExpanded && (
+                        <div className="timeline-details">
+                          {entry.remarks && (
+                            <div className="detail-item">
+                              <strong>Remarks:</strong>
+                              <p>{entry.remarks}</p>
+                            </div>
+                          )}
+
+                          {!isPublic && entry.metadata && (
+                            <div className="detail-item">
+                              <strong>Additional Details:</strong>
+                              <pre className="metadata">
+                                {JSON.stringify(entry.metadata, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+
+                          <div className="detail-item">
+                            <strong>Exact Time:</strong>
+                            <span>{new Date(entry.timestamp).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="timeline-footer">
+        <span className="timeline-count">
+          {timeline.length} {timeline.length === 1 ? 'entry' : 'entries'}
+        </span>
+        {!isPublic && (
+          <button onClick={fetchTimeline} className="refresh-button">
+            🔄 Refresh
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ComplaintTimeline;

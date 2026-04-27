@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { API_BASE_URL } from '../services/api.js';
+import { buildApiUrl } from '../services/api.js';
 import { clearStoredAuth, getStoredToken, notifyAuthLogout } from '../utils/authStorage.js';
 
 const normalizeNotificationError = (error) => {
@@ -44,7 +44,8 @@ const useNotifications = (pollingInterval = 60000) => { // Poll every 60 seconds
             throw new Error('No authentication token found');
         }
         
-        const response = await fetch(`${API_BASE_URL}${url}`, {
+        const response = await fetch(buildApiUrl(url), {
+            credentials: 'include',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',

@@ -1,5 +1,4 @@
 import React, { createContext, useState, useEffect } from 'react';
-import axios from 'axios';
 import { normalizeRole, normalizeUser } from '../utils/auth.js';
 import {
   AUTH_LOGOUT_EVENT,
@@ -38,7 +37,6 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const handleForcedLogout = () => {
-      delete axios.defaults.headers.common['Authorization'];
       setToken(null);
       setUser(null);
     };
@@ -61,11 +59,9 @@ export const AuthProvider = ({ children }) => {
 
       if (!payload || isExpired || hasUserMismatch) {
         clearStoredAuth();
-        delete axios.defaults.headers.common['Authorization'];
         setToken(null);
         setUser(null);
       } else {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         if (!normalizedUser) {
           const storedUser = getStoredUser();
 
@@ -78,7 +74,6 @@ export const AuthProvider = ({ children }) => {
         }
       }
     } else {
-      delete axios.defaults.headers.common['Authorization'];
       setUser(null);
     }
 
@@ -91,14 +86,12 @@ export const AuthProvider = ({ children }) => {
     setStoredUser(normalizedUser);
     setToken(authToken);
     setUser(normalizedUser);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
   };
 
   const logout = () => {
     clearStoredAuth();
     setToken(null);
     setUser(null);
-    delete axios.defaults.headers.common['Authorization'];
   };
 
   return (

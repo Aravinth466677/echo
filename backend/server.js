@@ -21,7 +21,39 @@ const pool = require('./config/database');
 
 const app = express();
 
-app.use(cors());
+const trimTrailingSlash = (value = '') => value.replace(/\/+$/, '');
+
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://echo-ashy-chi.vercel.app',
+      process.env.CLIENT_URL,
+      process.env.CORS_ORIGIN
+    ]
+      .filter(Boolean)
+      .map(trimTrailingSlash)
+  )
+);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const normalizedOrigin = trimTrailingSlash(origin);
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -41,6 +73,10 @@ app.use('/api/validation', validationRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Echo API is running' });
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).send('OK');
 });
 
 // Debug endpoint to check auth
@@ -86,24 +122,17 @@ server.on('error', (error) => {
   process.exit(1);
 });
 
-const startServer = async () => {
+const initializeDatabaseServices = async () => {
+  if (!pool.isConfigured) {
+    console.error(pool.configurationError);
+    return;
+  }
+
   try {
-    if (!pool.isConfigured) {
-      throw new Error(pool.configurationError);
-    }
-
     await SLAService.ensureDatabaseFunctions();
-
-    server.listen(PORT, () => {
-      console.log(`Echo backend running on port ${PORT}`);
-      
-      // Start escalation scheduler
-      startEscalationScheduler();
-      
-      // Start SLA monitoring
-      slaMonitor.start();
-      console.log('SLA monitoring system started');
-    });
+    startEscalationScheduler();
+    slaMonitor.start();
+    console.log('SLA monitoring system started');
   } catch (error) {
     console.error('Failed to initialize database-dependent services:', error);
 
@@ -112,9 +141,14 @@ const startServer = async () => {
         'PostgreSQL refused the connection. On Render, set DATABASE_URL to your Render Postgres connection string instead of relying on localhost.'
       );
     }
-
-    process.exit(1);
   }
+};
+
+const startServer = () => {
+  server.listen(PORT, async () => {
+    console.log(`Echo backend running on port ${PORT}`);
+    await initializeDatabaseServices();
+  });
 };
 
 startServer();
