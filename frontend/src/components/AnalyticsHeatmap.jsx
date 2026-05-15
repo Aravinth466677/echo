@@ -12,7 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const AnalyticsHeatmap = ({ data }) => {
+const AnalyticsHeatmap = ({ data, days = 7 }) => {
   // Default center (Tamil Nadu, India - adjust as needed)
   const defaultCenter = [11.1271, 78.6569];
   const defaultZoom = 7;
@@ -70,7 +70,7 @@ const AnalyticsHeatmap = ({ data }) => {
       
       {transformedData.length === 0 && (
         <div className="heatmap-empty">
-          <p>No complaint data available for the last 7 days</p>
+          <p>No complaint data available for the last {days} days</p>
         </div>
       )}
       

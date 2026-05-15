@@ -7,12 +7,60 @@ import './Dashboard.css';
 import './AuthorityForm.css';
 import '../components/PasswordField.css';
 
+const INITIAL_DATA_CACHE_TTL_MS = 5000;
+let initialDashboardDataPromise = null;
+let initialDashboardDataCache = null;
+
+const hasFreshInitialData = () =>
+  initialDashboardDataCache &&
+  Date.now() - initialDashboardDataCache.loadedAt < INITIAL_DATA_CACHE_TTL_MS;
+
+const fetchInitialDashboardData = async () => {
+  if (hasFreshInitialData()) {
+    return initialDashboardDataCache.data;
+  }
+
+  if (initialDashboardDataPromise) {
+    return initialDashboardDataPromise;
+  }
+
+  const request = Promise.all([
+    adminAPI.getAnalytics(),
+    adminAPI.getAuthorities(),
+    jurisdictionAPI.getAll(),
+    adminAPI.getCategories()
+  ])
+    .then(([analyticsRes, authoritiesRes, jurisdictionsRes, categoriesRes]) => {
+      const data = {
+        analytics: analyticsRes.data,
+        authorities: authoritiesRes.data.authorities || [],
+        jurisdictions: jurisdictionsRes.data.jurisdictions || [],
+        categories: categoriesRes.data.categories || []
+      };
+
+      initialDashboardDataCache = {
+        data,
+        loadedAt: Date.now()
+      };
+
+      return data;
+    })
+    .finally(() => {
+      initialDashboardDataPromise = null;
+    });
+
+  initialDashboardDataPromise = request;
+  return request;
+};
+
 const AdminDashboard = () => {
   const { user, logout } = useContext(AuthContext);
   const [analytics, setAnalytics] = useState(null);
   const [authorities, setAuthorities] = useState([]);
   const [jurisdictions, setJurisdictions] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState('analytics');
@@ -25,50 +73,44 @@ const AdminDashboard = () => {
     authorityLevel: 'JURISDICTION'
   });
 
-  // Debug: Log user object
   useEffect(() => {
-    console.log('Current user:', user);
-    console.log('User role:', user?.role);
-  }, [user]);
+    let isMounted = true;
 
-  useEffect(() => {
-    console.log('Component mounted, loading data...');
+    const loadData = async () => {
+      setIsLoading(true);
+      setLoadError('');
+
+      try {
+        const data = await fetchInitialDashboardData();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setAnalytics(data.analytics);
+        setAuthorities(data.authorities);
+        setJurisdictions(data.jurisdictions);
+        setCategories(data.categories);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        console.error('Failed to load admin dashboard data:', error);
+        setLoadError(error.response?.data?.error || 'Failed to load dashboard data');
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
     loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  useEffect(() => {
-    console.log('State updated:', { 
-      jurisdictions: jurisdictions.length, 
-      categories: categories.length,
-      authorities: authorities.length 
-    });
-  }, [jurisdictions, categories, authorities]);
-
-  const loadData = async () => {
-    try {
-      console.log('Starting data load...');
-      
-      const analyticsRes = await adminAPI.getAnalytics();
-      console.log('Analytics loaded:', analyticsRes.data);
-      setAnalytics(analyticsRes.data);
-      
-      const authoritiesRes = await adminAPI.getAuthorities();
-      console.log('Authorities loaded:', authoritiesRes.data);
-      setAuthorities(authoritiesRes.data.authorities);
-      
-      const jurisdictionsRes = await jurisdictionAPI.getAll();
-      console.log('Jurisdictions loaded:', jurisdictionsRes.data);
-      setJurisdictions(jurisdictionsRes.data.jurisdictions || []);
-      
-      const categoriesRes = await adminAPI.getCategories();
-      console.log('Categories loaded:', categoriesRes.data);
-      setCategories(categoriesRes.data.categories || []);
-      
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      console.error('Error details:', error.response?.data);
-    }
-  };
 
   const handleDeleteAuthority = async (authorityId, authorityEmail) => {
     if (!window.confirm(`Delete authority: ${authorityEmail}?\n\nThis will remove the user and all their assignments.`)) {
@@ -199,6 +241,18 @@ const AdminDashboard = () => {
       {!isAdmin && (
         <div style={{ padding: '20px', background: '#fee', color: '#c33', margin: '20px', borderRadius: '8px' }}>
           <strong>Access Denied:</strong> This page is only accessible to admin users. You are logged in as: {user?.role}
+        </div>
+      )}
+
+      {isAdmin && isLoading && (
+        <div style={{ padding: '20px', margin: '20px' }}>
+          Loading dashboard data...
+        </div>
+      )}
+
+      {isAdmin && loadError && !isLoading && (
+        <div style={{ padding: '20px', background: '#fee', color: '#c33', margin: '20px', borderRadius: '8px' }}>
+          <strong>Unable to load dashboard:</strong> {loadError}
         </div>
       )}
 

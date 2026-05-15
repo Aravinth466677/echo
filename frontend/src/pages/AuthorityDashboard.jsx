@@ -329,25 +329,9 @@ const AuthorityDashboard = () => {
             )}
 
             {activeTab === 'analytics' && (
-              <section className="analytics-redirect">
-                <div className="analytics-card">
-                  <h2>📊 Analytics Dashboard</h2>
-                  <p>View detailed analytics including complaint heatmaps, resolution metrics, and trends.</p>
-                  <div className="analytics-buttons">
-                    <button 
-                      className="primary-cta"
-                      onClick={() => window.open('/authority/analytics', '_blank')}
-                    >
-                      Open Analytics Dashboard
-                    </button>
-                    <button 
-                      className="secondary-cta"
-                      onClick={() => window.open('/heatmap', '_blank')}
-                    >
-                      🗺️ View Complaint Heatmap
-                    </button>
-                  </div>
-                </div>
+              <section className="complaints-section">
+                <h2>Analytics</h2>
+                <AnalyticsDashboard embedded />
               </section>
             )}
           </>

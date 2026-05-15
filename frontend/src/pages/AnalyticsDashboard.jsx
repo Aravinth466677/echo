@@ -5,7 +5,9 @@ import { analyticsAPI } from '../services/api';
 import AnalyticsHeatmap from '../components/AnalyticsHeatmap.jsx';
 import './AnalyticsDashboard.css';
 
-const AnalyticsDashboard = () => {
+const ANALYTICS_WINDOW_DAYS = 30;
+
+const AnalyticsDashboard = ({ embedded = false }) => {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
@@ -24,7 +26,11 @@ const AnalyticsDashboard = () => {
     try {
       const [summaryResponse, heatmapResponse] = await Promise.all([
         analyticsAPI.getSummary(),
-        analyticsAPI.getHeatmapData({ days: 7, categoryId: 'all', status: 'all' })
+        analyticsAPI.getHeatmapData({
+          days: ANALYTICS_WINDOW_DAYS,
+          categoryId: 'all',
+          status: 'all'
+        })
       ]);
 
       setSummary(summaryResponse.data.summary || summaryResponse.data.data);
@@ -58,14 +64,16 @@ const AnalyticsDashboard = () => {
   if (loading) {
     return (
       <div className="analytics-dashboard">
-        <header className="dashboard-header">
-          <h1>Analytics Dashboard</h1>
-          <div className="user-info">
-            <span>Welcome, {user?.fullName}</span>
-            <button onClick={() => navigate('/authority/dashboard')}>Back to Dashboard</button>
-            <button onClick={logout}>Logout</button>
-          </div>
-        </header>
+        {!embedded && (
+          <header className="dashboard-header">
+            <h1>Analytics Dashboard</h1>
+            <div className="user-info">
+              <span>Welcome, {user?.fullName}</span>
+              <button onClick={() => navigate('/authority/dashboard')}>Back to Dashboard</button>
+              <button onClick={logout}>Logout</button>
+            </div>
+          </header>
+        )}
         <div className="loading-container">
           <div className="spinner"></div>
           <p>Loading analytics...</p>
@@ -77,13 +85,15 @@ const AnalyticsDashboard = () => {
   if (error) {
     return (
       <div className="analytics-dashboard">
-        <header className="dashboard-header">
-          <h1>Analytics Dashboard</h1>
-          <div className="user-info">
-            <button onClick={() => navigate('/authority/dashboard')}>Back to Dashboard</button>
-            <button onClick={logout}>Logout</button>
-          </div>
-        </header>
+        {!embedded && (
+          <header className="dashboard-header">
+            <h1>Analytics Dashboard</h1>
+            <div className="user-info">
+              <button onClick={() => navigate('/authority/dashboard')}>Back to Dashboard</button>
+              <button onClick={logout}>Logout</button>
+            </div>
+          </header>
+        )}
         <div className="error-container">
           <div className="error-message">{error}</div>
           <button onClick={loadAnalyticsData} className="retry-btn">Retry</button>
@@ -94,14 +104,16 @@ const AnalyticsDashboard = () => {
 
   return (
     <div className="analytics-dashboard">
-      <header className="dashboard-header">
-        <h1>Analytics Dashboard</h1>
-        <div className="user-info">
-          <span>Welcome, {user?.fullName}</span>
-          <button onClick={() => navigate('/authority/dashboard')}>Back to Dashboard</button>
-          <button onClick={logout}>Logout</button>
-        </div>
-      </header>
+      {!embedded && (
+        <header className="dashboard-header">
+          <h1>Analytics Dashboard</h1>
+          <div className="user-info">
+            <span>Welcome, {user?.fullName}</span>
+            <button onClick={() => navigate('/authority/dashboard')}>Back to Dashboard</button>
+            <button onClick={logout}>Logout</button>
+          </div>
+        </header>
+      )}
 
       <div className="dashboard-content">
         {/* Metrics Cards */}
@@ -147,10 +159,10 @@ const AnalyticsDashboard = () => {
         <div className="heatmap-section">
           <div className="section-header">
             <h2>Complaint Heatmap</h2>
-            <p>Geographic distribution of complaints (Last 7 days)</p>
+            <p>Geographic distribution of complaints (Last {ANALYTICS_WINDOW_DAYS} days)</p>
           </div>
           <div className="heatmap-container">
-            <AnalyticsHeatmap data={heatmapData} />
+            <AnalyticsHeatmap data={heatmapData} days={ANALYTICS_WINDOW_DAYS} />
           </div>
         </div>
 

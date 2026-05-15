@@ -504,7 +504,7 @@ const getActiveIssues = async (req, res) => {
       return res.status(403).json({ error: 'Authority profile not found' });
     }
     
-    const assignedIssues = await getAssignedIssues(scope, ['verified', 'in_progress', 'resolved'], {
+    const assignedIssues = await getAssignedIssues(scope, ['pending', 'verified', 'in_progress', 'resolved'], {
       includeHistoricalAssignments: true
     });
     const issuesWithMetadata = await enrichAssignedIssues(assignedIssues, scope);

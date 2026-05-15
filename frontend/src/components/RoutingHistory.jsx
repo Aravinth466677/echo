@@ -4,14 +4,11 @@ import './RoutingHistory.css';
 
 const ROUTING_REASON_LABELS = {
   NORMAL: 'Standard routing to jurisdiction authority',
-  HIGH_PRIORITY_ESCALATION: 'High priority - routed directly to Super Admin (Echo Count >= 10)',
-  MEDIUM_PRIORITY_ESCALATION: 'Medium priority - routed directly to Department (Echo Count >= 5)',
   NO_JURISDICTION: 'No jurisdiction found - routed to department',
   NO_JURISDICTION_AUTHORITY: 'No jurisdiction authority available - routed to department',
-  JURISDICTION_FALLBACK: 'No jurisdiction authority available - routed to department',
   NO_DEPARTMENT_AUTHORITY: 'No department authority available - routed to Super Admin',
-  SUPER_ADMIN_FALLBACK: 'No department authority available - routed to Super Admin',
-  SLA_ESCALATION: 'Escalated due to SLA breach (timeout)',
+  SLA_ESCALATION: 'Escalated due to SLA timeout - issue pending too long',
+  RE_ROUTING: 'Re-routed due to escalation'
 };
 
 const AUTHORITY_BADGES = {

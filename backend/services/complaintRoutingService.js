@@ -54,50 +54,15 @@ async function detectJurisdiction(longitude, latitude, dbClient = null) {
 /**
  * Find authority by level and filters - Updated for authorities table
  * Priority: JURISDICTION → DEPARTMENT → SUPER_ADMIN
- * Priority escalation based on echo_count:
- * - echo_count >= 10: Route directly to SUPER_ADMIN
- * - echo_count >= 5: Route directly to DEPARTMENT
- * - echo_count < 5: Normal hierarchy (JURISDICTION → DEPARTMENT → SUPER_ADMIN)
+ * NO echo count escalation - all complaints go through normal hierarchy
+ * Time-based escalation happens later via SLA monitoring
  */
 async function findAuthority(categoryId, jurisdictionId, dbClient = null, echoCount = 1) {
   try {
     const client = dbClient || pool;
 
-    // Priority routing based on echo count
-    if (echoCount >= 10) {
-      // High priority: Route directly to SUPER_ADMIN
-      console.log(`High priority routing (echo_count ${echoCount}): SUPER_ADMIN`);
-      const superAdmin = await client.query(
-        `SELECT id, email, authority_level, full_name
-         FROM authorities
-         WHERE authority_level = 'SUPER_ADMIN'
-         AND is_active = true
-         LIMIT 1`
-      );
-      if (superAdmin.rows.length > 0) {
-        return superAdmin.rows[0];
-      }
-    }
-
-    if (echoCount >= 5) {
-      // Medium priority: Route directly to DEPARTMENT
-      console.log(`Medium priority routing (echo_count ${echoCount}): DEPARTMENT`);
-      const departmentAuth = await client.query(
-        `SELECT id, email, authority_level, full_name
-         FROM authorities
-         WHERE category_id = $1
-         AND authority_level = 'DEPARTMENT'
-         AND is_active = true
-         LIMIT 1`,
-        [categoryId]
-      );
-      if (departmentAuth.rows.length > 0) {
-        return departmentAuth.rows[0];
-      }
-    }
-
-    // Normal priority routing: JURISDICTION → DEPARTMENT → SUPER_ADMIN
-    console.log(`Normal priority routing (echo_count ${echoCount}): Standard hierarchy`);
+    // Always use normal hierarchy - no echo count shortcuts
+    console.log(`Normal routing (echo_count ${echoCount}): Standard hierarchy`);
 
     // Step 1: Try JURISDICTION authority
     if (jurisdictionId) {
@@ -199,12 +164,8 @@ async function routeComplaint(
       return null;
     }
     
-    // Determine routing reason
-    if (echoCount >= 10) {
-      routingReason = 'HIGH_PRIORITY_ESCALATION';
-    } else if (echoCount >= 5) {
-      routingReason = 'MEDIUM_PRIORITY_ESCALATION';
-    } else if (!jurisdictionId && authority.authority_level === 'DEPARTMENT') {
+    // Determine routing reason - no echo count escalation
+    if (!jurisdictionId && authority.authority_level === 'DEPARTMENT') {
       routingReason = 'NO_JURISDICTION';
     } else if (authority.authority_level === 'DEPARTMENT') {
       routingReason = 'NO_JURISDICTION_AUTHORITY';

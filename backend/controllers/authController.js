@@ -44,8 +44,6 @@ const register = async (req, res) => {
     const user = result.rows[0];
     const normalizedRole = normalizeRole(user.role);
     
-    await auditLog(user.id, 'USER_REGISTERED', 'user', user.id, { email: normalizedEmail, hasPhone: !!phone }, req.ip);
-    
     res.status(201).json({
       message: 'Registration successful',
       user: {
@@ -53,6 +51,8 @@ const register = async (req, res) => {
         role: normalizedRole
       }
     });
+
+    auditLog(user.id, 'USER_REGISTERED', 'user', user.id, { email: normalizedEmail, hasPhone: !!phone }, req.ip);
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
@@ -101,8 +101,6 @@ const login = async (req, res) => {
       { expiresIn: '24h' }
     );
     
-    await auditLog(user.id, 'USER_LOGIN', 'user', user.id, { email: normalizedEmail }, req.ip);
-    
     res.json({
       token,
       user: {
@@ -113,6 +111,8 @@ const login = async (req, res) => {
         wardId: user.ward_id
       }
     });
+
+    auditLog(user.id, 'USER_LOGIN', 'user', user.id, { email: normalizedEmail }, req.ip);
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
@@ -160,8 +160,6 @@ const authorityLogin = async (req, res) => {
       { expiresIn: '24h' }
     );
     
-    await auditLog(authority.id, 'AUTHORITY_LOGIN', 'authority', authority.id, { email: normalizedEmail }, req.ip);
-    
     res.json({
       token,
       user: {
@@ -175,6 +173,8 @@ const authorityLogin = async (req, res) => {
         department: authority.department
       }
     });
+
+    auditLog(authority.id, 'AUTHORITY_LOGIN', 'authority', authority.id, { email: normalizedEmail }, req.ip);
   } catch (error) {
     console.error('Authority login error:', error);
     res.status(500).json({ error: 'Login failed' });

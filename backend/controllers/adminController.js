@@ -5,26 +5,25 @@ const SLAService = require('../services/slaService');
 
 const getAnalytics = async (req, res) => {
   try {
-    const stats = await pool.query(`
-      SELECT 
-        (SELECT COUNT(*) FROM issues WHERE status = 'pending') as pending_issues,
-        (SELECT COUNT(*) FROM issues WHERE status = 'verified') as verified_issues,
-        (SELECT COUNT(*) FROM issues WHERE status = 'in_progress') as in_progress_issues,
-        (SELECT COUNT(*) FROM issues WHERE status = 'resolved') as resolved_issues,
-        (SELECT COUNT(*) FROM complaints WHERE created_at > CURRENT_DATE) as today_complaints,
-        (SELECT COUNT(*) FROM users WHERE role = 'citizen') as total_citizens
-    `);
-    
-    const categoryStats = await pool.query(`
-      SELECT cat.name, COUNT(i.id) as issue_count, SUM(i.echo_count) as total_echoes
-      FROM categories cat
-      LEFT JOIN issues i ON i.category_id = cat.id
-      GROUP BY cat.id, cat.name
-      ORDER BY issue_count DESC
-    `);
-    
-    // Get SLA statistics
-    const slaStats = await SLAService.getSLAStatistics();
+    const [stats, categoryStats, slaStats] = await Promise.all([
+      pool.query(`
+        SELECT 
+          (SELECT COUNT(*) FROM issues WHERE status = 'pending') as pending_issues,
+          (SELECT COUNT(*) FROM issues WHERE status = 'verified') as verified_issues,
+          (SELECT COUNT(*) FROM issues WHERE status = 'in_progress') as in_progress_issues,
+          (SELECT COUNT(*) FROM issues WHERE status = 'resolved') as resolved_issues,
+          (SELECT COUNT(*) FROM complaints WHERE created_at > CURRENT_DATE) as today_complaints,
+          (SELECT COUNT(*) FROM users WHERE role = 'citizen') as total_citizens
+      `),
+      pool.query(`
+        SELECT cat.name, COUNT(i.id) as issue_count, SUM(i.echo_count) as total_echoes
+        FROM categories cat
+        LEFT JOIN issues i ON i.category_id = cat.id
+        GROUP BY cat.id, cat.name
+        ORDER BY issue_count DESC
+      `),
+      SLAService.getSLAStatistics()
+    ]);
     
     res.json({
       stats: stats.rows[0],
