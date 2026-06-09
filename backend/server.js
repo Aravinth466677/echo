@@ -30,10 +30,12 @@ const allowedOrigins = Array.from(
       'http://localhost:5173',
       'https://echo-ashy-chi.vercel.app',
       process.env.CLIENT_URL,
-      process.env.CORS_ORIGIN
+      process.env.CORS_ORIGIN,
+      // Add common Vercel patterns
+      /^https:\/\/.*\.vercel\.app$/
     ]
       .filter(Boolean)
-      .map(trimTrailingSlash)
+      .map(origin => typeof origin === 'string' ? trimTrailingSlash(origin) : origin)
   )
 );
 
@@ -45,11 +47,22 @@ app.use(cors({
     }
 
     const normalizedOrigin = trimTrailingSlash(origin);
-    if (allowedOrigins.includes(normalizedOrigin)) {
+    
+    // Check exact matches first
+    if (allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') {
+        return allowed === normalizedOrigin;
+      }
+      if (allowed instanceof RegExp) {
+        return allowed.test(normalizedOrigin);
+      }
+      return false;
+    })) {
       callback(null, true);
       return;
     }
 
+    console.log(`CORS blocked for origin: ${origin}`);
     callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true
@@ -74,8 +87,30 @@ app.use('/api/jurisdiction-detection', jurisdictionDetectionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/validation', validationRoutes);
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Echo API is running' });
+app.get('/health', async (req, res) => {
+  try {
+    // Test database connection
+    const result = await pool.query('SELECT NOW() as timestamp, version() as postgres_version');
+    res.json({ 
+      status: 'healthy',
+      message: 'Echo API is running',
+      database: 'connected',
+      timestamp: result.rows[0].timestamp,
+      version: result.rows[0].postgres_version.split(' ')[0],
+      uptime: Math.floor(process.uptime()),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    console.error('Health check database error:', error.message);
+    res.status(500).json({ 
+      status: 'unhealthy',
+      message: 'Database connection failed',
+      database: 'disconnected',
+      error: error.message,
+      uptime: Math.floor(process.uptime()),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  }
 });
 
 app.get('/api/health', (req, res) => {
