@@ -24,7 +24,7 @@ const Login = () => {
       let response;
       
       // Use different login endpoints for different roles
-      if (role === 'authority') {
+      if (role === 'authority' || role === 'admin') {
         response = await authAPI.authorityLogin({
           email: email.trim().toLowerCase(),
           password
@@ -37,7 +37,12 @@ const Login = () => {
       }
       
       const selectedRole = normalizeRole(role);
-      const userRole = normalizeRole(response.data.user.role);
+      let userRole = normalizeRole(response.data.user.role);
+      
+      // Map SUPER_ADMIN to admin for frontend
+      if (response.data.user.authorityLevel === 'SUPER_ADMIN') {
+        userRole = 'admin';
+      }
       
       if (userRole !== selectedRole) {
         logout();

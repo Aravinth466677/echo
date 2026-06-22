@@ -160,37 +160,58 @@ class SLAService {
    * Check for SLA breaches and update database
    */
   static async checkSLABreaches() {
-    const client = await pool.connect();
-    
     try {
-      await client.query('BEGIN');
-      
-      // Find issues with breached SLAs that haven't been marked as breached
-      const breachedIssues = await client.query(`
-        UPDATE issues 
-        SET is_sla_breached = TRUE,
-            updated_at = NOW()
-        WHERE sla_deadline < NOW() 
-          AND status NOT IN ('resolved', 'rejected')
-          AND is_sla_breached = FALSE
-        RETURNING id, category_id, sla_deadline, echo_count
+      // Check if SLA columns exist before proceeding
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'issues' 
+        AND column_name IN ('sla_due_date', 'sla_deadline')
       `);
       
-      console.log(`Found ${breachedIssues.rows.length} newly breached SLAs`);
-      
-      // Log breaches for escalation
-      for (const issue of breachedIssues.rows) {
-        await this.logSLABreach(issue.id, client);
+      if (columnCheck.rows.length === 0) {
+        console.log('No SLA columns found in issues table, skipping SLA check');
+        return [];
       }
       
-      await client.query('COMMIT');
-      return breachedIssues.rows;
+      const slaColumn = columnCheck.rows.find(row => row.column_name === 'sla_due_date') 
+        ? 'sla_due_date' 
+        : 'sla_deadline';
+        
+      console.log(`Using SLA column: ${slaColumn}`);
+      
+      const client = await pool.connect();
+      
+      try {
+        await client.query('BEGIN');
+        
+        // Find issues with breached SLAs
+        const breachedIssues = await client.query(`
+          SELECT id, category_id, ${slaColumn}, echo_count
+          FROM issues 
+          WHERE ${slaColumn} < NOW() 
+            AND status NOT IN ('resolved', 'rejected')
+            AND ${slaColumn} IS NOT NULL
+        `);
+        
+        console.log(`Found ${breachedIssues.rows.length} issues with breached SLAs`);
+        
+        // Log breaches for escalation
+        for (const issue of breachedIssues.rows) {
+          await this.logSLABreach(issue.id, client);
+        }
+        
+        await client.query('COMMIT');
+        return breachedIssues.rows;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Error checking SLA breaches:', error);
-      throw error;
-    } finally {
-      client.release();
+      console.error('Error in SLA breach check:', error);
+      return [];
     }
   }
 
